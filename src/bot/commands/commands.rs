@@ -23,16 +23,22 @@ async fn on_error(error: poise::FrameworkError<'_, Data, anyhow::Error>) {
 }
 
 pub async fn command_framework(guild_id: u64, agent: Arc<Agent>) -> poise::framework::Framework<Data, anyhow::Error> {
-    let admin_commands = (
-        prompt::prompt()
-    );
-    let general_commands = (
-        ping::ping()
-    );
+    let mut admin_commands = vec![
+        prompt::prompt(),
+        exec::exec(),
+    ];
+
+    let mut general_commands = vec![
+        ping::ping(),
+    ];
+
+    let mut commands = vec![];
+    commands.append(&mut admin_commands);
+    commands.append(&mut general_commands);
 
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
-            commands: vec![admin_commands, general_commands],
+            commands,
             prefix_options: poise::PrefixFrameworkOptions {
                 prefix: Some("w!".into()),
                 ..Default::default()

@@ -1,24 +1,11 @@
 use crate::bot::commands::commands::Context;
 
 /// Change system prompt (Only admin)
-#[poise::command(slash_command)]
+#[poise::command(slash_command, required_permissions = "ADMINISTRATOR")]
 pub async fn prompt(
     ctx: Context<'_>,
     #[description = "New system prompt"] new_prompt: String,
 ) -> anyhow::Result<()> {
-    let is_admin = ctx
-        .author_member()
-        .await
-        .map(|m| m.permissions.map_or(
-            false, |p| p.contains(serenity::model::Permissions::ADMINISTRATOR))
-        )
-        .unwrap_or(false);
-
-    if !is_admin {
-        ctx.say("You are not admin.").await?;
-        return Ok(());
-    }
-
     let agent = &ctx.data().agent;
     agent.update_system_prompt(new_prompt.clone()).await;
     

@@ -3,9 +3,11 @@ use crate::agent::memory::ConversationMemory;
 use crate::models::message::{Message, MessageRole};
 use crate::services::openai::OpenAiService;
 use std::collections::HashMap;
+use std::ops::Add;
 use std::sync::Arc;
 
 use anyhow::Result;
+use serenity::all::Context as SerenityContext;
 use tokio::sync::RwLock;
 
 pub struct Agent {
@@ -52,10 +54,55 @@ impl Agent {
         )
             .await;
 
-        let response = self.chat_service.read().await.chat_with_history(content, &memory).await?;
+        let response = self
+            .chat_service
+            .read()
+            .await
+            .chat_with_history(content, &memory, false, None)
+            .await?;
 
         self.add_message_to_history(
             user_id,
+            Message::new(MessageRole::Assistant, response.clone()),
+        )
+            .await;
+
+        Ok(response)
+    }
+
+    pub async fn process_message_with_tools(
+        &self,
+        user_id: &str,
+        content: &str,
+        ctx: &SerenityContext,
+    ) -> Result<String> {
+        tracing::info!("Processing message from user with tools: {}", user_id);
+
+        let user_id_with_tools = user_id.to_string().add("-tools");
+
+        let memory = {
+            let mut conversations = self.conversations.write().await;
+            conversations
+                .entry(user_id_with_tools.to_string())
+                .or_insert_with(|| ConversationMemory::new(self.max_history))
+                .clone()
+        };
+
+        self.add_message_to_history(
+            user_id_with_tools.as_str(),
+            Message::new(MessageRole::User, content.to_string()),
+        )
+            .await;
+
+        let response = self
+            .chat_service
+            .read()
+            .await
+            .chat_with_history(content, &memory, true, Some(ctx))
+            .await?;
+
+        self.add_message_to_history(
+            user_id_with_tools.as_str(),
             Message::new(MessageRole::Assistant, response.clone()),
         )
             .await;
@@ -100,5 +147,12 @@ impl Agent {
 
     pub async fn update_system_prompt(&self, new_prompt: String) {
         self.chat_service.write().await.update_system_prompt(new_prompt);
+    }
+
+    pub async fn update_tool_system_prompt(&self, new_prompt: String) {
+        self.chat_service
+            .write()
+            .await
+            .update_tool_system_prompt(new_prompt);
     }
 }
