@@ -30,6 +30,9 @@ pub struct Config {
 
     #[serde(rename = "allowed_user_id")]
     pub allowed_user_id: Option<u64>,
+    
+    #[serde(rename = "target_guild_id")]
+    pub target_guild_id: u64,
 
     #[serde(rename = "log_level", default = "default_log_level")]
     pub log_level: String,

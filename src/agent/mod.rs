@@ -2,4 +2,4 @@ pub mod agent;
 pub mod chat;
 mod context;
 mod memory;
-mod prompts;
+pub mod prompts;
