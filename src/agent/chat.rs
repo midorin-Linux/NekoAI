@@ -3,12 +3,7 @@ use crate::models::message::MessageRole;
 use crate::services::openai::OpenAiService;
 
 use anyhow::Result;
-use async_openai::types::chat::{
-    CreateChatCompletionRequestArgs,
-    ChatCompletionRequestAssistantMessageArgs,
-    ChatCompletionRequestSystemMessageArgs,
-    ChatCompletionRequestUserMessageArgs,
-};
+use async_openai::types::chat::ChatCompletionRequestAssistantMessageArgs;
 
 pub struct ChatService {
     openai: OpenAiService,
@@ -83,35 +78,4 @@ impl ChatService {
     pub fn system_prompt(&self) -> &str {
         &self.system_prompt
     }
-}
-
-pub async fn single_chat(
-    client: &async_openai::Client<async_openai::config::OpenAIConfig>,
-    model: &str,
-    user_message: &str,
-) -> Result<String> {
-    let system_message = ChatCompletionRequestSystemMessageArgs::default()
-        .content("You are a helpful assistant.")
-        .build()?
-        .into();
-
-    let user_msg = ChatCompletionRequestUserMessageArgs::default()
-        .content(user_message)
-        .build()?
-        .into();
-
-    let request = CreateChatCompletionRequestArgs::default()
-        .model(model)
-        .messages(vec![system_message, user_msg])
-        .build()?;
-
-    let response = client.chat().create(request).await?;
-
-    let content = response
-        .choices
-        .first()
-        .and_then(|choice| choice.message.content.clone())
-        .ok_or_else(|| anyhow::anyhow!("No response content"))?;
-
-    Ok(content)
 }
