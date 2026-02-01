@@ -2,5 +2,5 @@
 
 .idea
 .env
-prompts/system_prompt.txt
+prompts/original.txt
 STRUCTURE.md
