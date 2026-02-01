@@ -17,7 +17,6 @@ async fn main() -> Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
     let _ = init_tracing(config.clone())?;
 
-    // let mut app = app::runner::App::new(config);
     let mut app = bot::client::App::new(config);
     app.run().await?;
 

@@ -1,0 +1,13 @@
+[provider]
+api_key="sk-or-v1-"
+base_url="https://openrouter.ai/api/v1"
+
+[model]
+name="openai/gpt-oss-120b:free"
+
+[sampling]
+max_token=65536
+temperature=0.8
+top_p=0.95
+frequency_penalty=1.1
+presence_penalty=1.0

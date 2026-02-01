@@ -1,3 +1,5 @@
+use crate::utils::config::Sampling;
+
 use anyhow::{anyhow, Result};
 use async_openai::{
     config::OpenAIConfig,
@@ -13,10 +15,11 @@ use async_openai::{
 pub struct OpenAiService {
     client: OpenAiClient<OpenAIConfig>,
     model: String,
+    sampling: Sampling,
 }
 
 impl OpenAiService {
-    pub fn new(api_key: &str, base_url: &str, model: &str) -> Self {
+    pub fn new(api_key: &str, base_url: &str, model: &str, sampling: Sampling) -> Self {
         let config = OpenAIConfig::new()
             .with_api_key(api_key)
             .with_api_base(base_url);
@@ -25,6 +28,7 @@ impl OpenAiService {
         Self {
             client,
             model: model.to_string(),
+            sampling
         }
     }
 
@@ -35,6 +39,11 @@ impl OpenAiService {
         let request = CreateChatCompletionRequestArgs::default()
             .model(&self.model)
             .messages(messages)
+            .max_tokens(self.sampling.max_token)
+            .temperature(self.sampling.temperature)
+            .top_p(self.sampling.top_p)
+            .frequency_penalty(self.sampling.frequency_penalty)
+            .presence_penalty(self.sampling.presence_penalty)
             .build()?;
 
         let response = self.client.chat().create(request).await?;
@@ -59,7 +68,12 @@ impl OpenAiService {
         let mut request_builder = CreateChatCompletionRequestArgs::default();
         request_builder
             .model(&self.model)
-            .messages(messages);
+            .messages(messages)
+            .max_tokens(self.sampling.max_token)
+            .temperature(self.sampling.temperature)
+            .top_p(self.sampling.top_p)
+            .frequency_penalty(self.sampling.frequency_penalty)
+            .presence_penalty(self.sampling.presence_penalty);
 
         if !tools.is_empty() {
             request_builder.tools(tools);

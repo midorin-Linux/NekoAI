@@ -2,31 +2,47 @@ use anyhow::Result;
 use config::{Config as ConfigBuilder, ConfigError, Environment, File};
 use serde::Deserialize;
 
-fn default_log_level() -> String {
-    "info".to_string()
+fn default_log_level() -> String { "info".to_string() }
+
+fn default_max_token() -> u32 { 65536 }
+
+fn default_temperature() -> f32 { 0.8 }
+
+fn default_top_p() -> f32 { 0.95 }
+
+fn default_frequency_penalty() -> f32 { 1.1 }
+
+fn default_presence_penalty() -> f32 { 1.0 }
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Provider {
+    pub api_key: String,
+    pub base_url: String,
 }
 
-fn default_openai_base_url() -> String {
-    "https://api.openai.com/v1".to_string()
+#[derive(Debug, Clone, Deserialize)]
+pub struct Model {
+    pub name: String,
 }
 
-fn default_openai_model() -> String {
-    "gpt-3.5-turbo".to_string()
+#[derive(Debug, Clone, Deserialize)]
+pub struct Sampling {
+    #[serde(default = "default_max_token")]
+    pub max_token: u32,
+    #[serde(default = "default_temperature")]
+    pub temperature: f32,
+    #[serde(default = "default_top_p")]
+    pub top_p: f32,
+    #[serde(default = "default_frequency_penalty")]
+    pub frequency_penalty: f32,
+    #[serde(default = "default_presence_penalty")]
+    pub presence_penalty: f32,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     #[serde(rename = "token")]
     pub discord_token: String,
-
-    #[serde(rename = "openai_api_key")]
-    pub openai_api_key: String,
-
-    #[serde(rename = "openai_base_url", default = "default_openai_base_url")]
-    pub openai_base_url: String,
-
-    #[serde(rename = "openai_model", default = "default_openai_model")]
-    pub openai_model: String,
 
     #[serde(rename = "allowed_user_id")]
     pub allowed_user_id: Option<u64>,
@@ -36,6 +52,10 @@ pub struct Config {
 
     #[serde(rename = "log_level", default = "default_log_level")]
     pub log_level: String,
+
+    pub provider: Provider,
+    pub model: Model,
+    pub sampling: Sampling,
 }
 
 impl Config {
@@ -44,9 +64,13 @@ impl Config {
 
         let config = ConfigBuilder::builder()
             .add_source(
+                File::with_name("config/model.toml")
+                    .required(true),
+            )
+            .add_source(
                 File::with_name(".env")
                     .format(config::FileFormat::Ini)
-                    .required(false),
+                    .required(true),
             )
             .add_source(Environment::default().separator("__"))
             .build()?;

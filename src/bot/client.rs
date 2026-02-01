@@ -24,9 +24,10 @@ impl App {
         let intents = GatewayIntents::all();
 
         let openai_client = OpenAiService::new(
-            &self.config.openai_api_key,
-            &self.config.openai_base_url,
-            &self.config.openai_model,
+            &self.config.provider.api_key,
+            &self.config.provider.base_url,
+            &self.config.model.name,
+            self.config.sampling.clone(),
         );
 
         let system_prompt = load_system_prompt();
