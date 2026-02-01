@@ -1,6 +1,6 @@
 use crate::agent::tools::tools::build_tool;
 use crate::agent::tools::discord::{
-    err, get_guild_id, get_guild_id_default, get_string, get_u64, ok, to_value
+    err, get_guild_id_default, get_string, get_u64, ok, to_value
 };
 
 use anyhow::Result;

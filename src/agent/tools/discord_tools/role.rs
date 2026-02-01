@@ -1,12 +1,12 @@
 use crate::agent::tools::tools::build_tool;
 use crate::agent::tools::discord::{
-    err, get_bool, get_guild_id, get_guild_id_default, get_string, get_u64, get_user_id, ok, parse_colour, to_value
+    err, get_bool, get_guild_id_default, get_string, get_u64, get_user_id, ok, parse_colour, to_value
 };
 
 use anyhow::Result;
 use async_openai::types::chat::ChatCompletionTools;
 use serde_json::{json, Value};
-use serenity::all::{Context, CreateRole, EditRole, RoleId};
+use serenity::all::{Context, EditRole, RoleId};
 
 pub fn definitions() -> Result<Vec<ChatCompletionTools>> {
     let mut tools = Vec::new();
@@ -121,25 +121,25 @@ async fn create_role(ctx: &Context, args: &Value) -> String {
         return err("guild_id is required");
     };
 
-    let mut builder = CreateRole::new();
+    let name = get_string(args, "name").unwrap_or_else(|| "New Role".to_string());
+    let permissions = get_u64(args, "permissions").unwrap_or(0);
+    let color = args.get("color").and_then(parse_colour);
+    let hoist = get_bool(args, "hoist").unwrap_or(false);
+    let mentionable = get_bool(args, "mentionable").unwrap_or(false);
 
-    if let Some(name) = get_string(args, "name") {
-        builder = builder.name(name);
-    }
-    if let Some(permissions) = get_u64(args, "permissions") {
-        builder = builder.permissions(serenity::all::Permissions::from_bits_truncate(permissions));
-    }
-    if let Some(color) = args.get("color").and_then(parse_colour) {
-        builder = builder.colour(color);
-    }
-    if let Some(hoist) = get_bool(args, "hoist") {
-        builder = builder.hoist(hoist);
-    }
-    if let Some(mentionable) = get_bool(args, "mentionable") {
-        builder = builder.mentionable(mentionable);
-    }
+    let builder = EditRole::new()
+        .name(name)
+        .permissions(serenity::all::Permissions::from_bits_truncate(permissions))
+        .hoist(hoist)
+        .mentionable(mentionable);
+    
+    let builder = if let Some(color) = color {
+        builder.colour(color)
+    } else {
+        builder
+    };
 
-    match guild_id.create_role(ctx, builder).await {
+    match ctx.http.create_role(guild_id, &builder, None).await {
         Ok(role) => ok(to_value(&role)),
         Err(error) => err(format!("Failed to create role: {error}")),
     }
@@ -213,7 +213,7 @@ async fn add_role_to_member(ctx: &Context, args: &Value) -> String {
     };
 
     match guild_id.member(ctx, user_id).await {
-        Ok(mut member) => {
+        Ok(member) => {
             match member.add_role(ctx, role_id).await {
                 Ok(()) => ok(json!({ "added": true })),
                 Err(error) => err(format!("Failed to add role to member: {error}")),
@@ -235,7 +235,7 @@ async fn remove_role_from_member(ctx: &Context, args: &Value) -> String {
     };
 
     match guild_id.member(ctx, user_id).await {
-        Ok(mut member) => {
+        Ok(member) => {
             match member.remove_role(ctx, role_id).await {
                 Ok(()) => ok(json!({ "removed": true })),
                 Err(error) => err(format!("Failed to remove role from member: {error}")),

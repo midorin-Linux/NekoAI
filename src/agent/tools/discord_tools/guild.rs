@@ -1,12 +1,12 @@
 use crate::agent::tools::tools::build_tool;
 use crate::agent::tools::discord::{
-    err, get_bool, get_channel_id, get_guild_id, get_guild_id_default, get_string, get_u16, get_u32, get_u64, get_u8, get_user_id, ok, parse_channel_type, parse_timestamp, to_value
+    err, get_bool, get_guild_id_default, get_string, get_u32, get_u64, get_u8, get_user_id, ok, to_value
 };
 
 use anyhow::Result;
 use async_openai::types::chat::ChatCompletionTools;
 use serde_json::{json, Value};
-use serenity::all::{Context, EditGuild, EditMember, GuildId, RoleId, UserId};
+use serenity::all::{Context, EditGuild, GuildId};
 
 pub fn definitions() -> Result<Vec<ChatCompletionTools>> {
     let mut tools = Vec::new();
@@ -25,7 +25,7 @@ pub fn definitions() -> Result<Vec<ChatCompletionTools>> {
 
     tools.push(build_tool(
         "get_guild_list",
-        "List guilds the bot is in.",
+        "List guilds bot is in.",
         json!({
             "type": "object",
             "properties": {
@@ -45,7 +45,7 @@ pub fn definitions() -> Result<Vec<ChatCompletionTools>> {
                 "name": { "type": "string", "description": "New guild name." },
                 "description": { "type": "string", "description": "New guild description." },
                 "icon_path": { "type": "string", "description": "Local path to PNG icon file." },
-                "clear_icon": { "type": "boolean", "description": "Clear the current icon." }
+                "clear_icon": { "type": "boolean", "description": "Clear current icon." }
             },
             "required": ["guild_id"]
         }),
@@ -83,9 +83,14 @@ async fn get_guild_info(ctx: &Context, args: &Value) -> String {
 
 async fn get_guild_list(ctx: &Context, args: &Value) -> String {
     let limit = get_u64(args, "limit");
-    let after = get_u64(args, "after").map(GuildId::new);
+    let after = get_u64(args, "after");
 
-    match ctx.http.get_guilds(after, limit).await {
+    let pagination = match after {
+        Some(guild_id) => Some(serenity::http::GuildPagination::After(GuildId::new(guild_id))),
+        None => None,
+    };
+
+    match ctx.http.get_guilds(pagination, limit).await {
         Ok(guilds) => ok(to_value(&guilds)),
         Err(error) => err(format!("Failed to fetch guild list: {error}")),
     }
@@ -113,8 +118,8 @@ async fn modify_guild(ctx: &Context, args: &Value) -> String {
     } else if let Some(icon_path) = get_string(args, "icon_path") {
         match tokio::fs::read(&icon_path).await {
             Ok(icon_data) => {
-                let base64 = base64::encode(&icon_data);
-                builder = builder.icon(Some(format!("data:image/png;base64,{}", base64)));
+                let attachment = serenity::all::CreateAttachment::bytes(icon_data, "icon.png");
+                builder = builder.icon(Some(&attachment));
                 changed = true;
             }
             Err(error) => return err(format!("Failed to read icon file: {error}")),
@@ -136,27 +141,18 @@ async fn get_audit_log(ctx: &Context, args: &Value) -> String {
         return err("guild_id is required");
     };
 
-    let mut builder = serenity::all::GetAuditLogs::new();
-    if let Some(limit) = get_u8(args, "limit") {
-        builder = builder.limit(limit);
-    }
-    if let Some(action_type) = get_u32(args, "action_type") {
-        builder = builder.action_type(action_type);
-    }
-    if let Some(user_id) = get_user_id(args, "user_id") {
-        builder = builder.user_id(user_id);
-    }
-    if let Some(before) = get_u64(args, "before") {
-        builder = builder.before(before);
-    }
+    let limit = get_u8(args, "limit");
+    let action_type = get_u32(args, "action_type")
+        .map(|v| serenity::all::audit_log::Action::from_value(v as u8));
+    let user_id = get_user_id(args, "user_id");
+    let before = get_u64(args, "before")
+        .map(|v| serenity::all::AuditLogEntryId::new(v));
 
-    match guild_id.audit_logs(&ctx.http, builder).await {
+    match guild_id.audit_logs(&ctx.http, action_type, user_id, before, limit).await {
         Ok(log) => ok(to_value(&log)),
         Err(error) => err(format!("Failed to fetch audit log: {error}")),
     }
 }
-
-use crate::agent::tools::discord::get_user_id;
 
 pub async fn execute(ctx: &Context, name: &str, args: &Value) -> Option<String> {
     match name {

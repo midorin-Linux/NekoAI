@@ -1,6 +1,6 @@
 use crate::agent::tools::tools::build_tool;
 use crate::agent::tools::discord::{
-    err, get_bool, get_channel_id, get_guild_id, get_guild_id_default, get_string, get_u32, get_u64, get_u64_list, get_u8, get_user_id, ok, parse_timestamp, to_value
+    err, get_bool, get_channel_id, get_guild_id_default, get_string, get_u32, get_u64, get_u64_list, get_u8, get_user_id, ok, parse_timestamp, to_value
 };
 
 use anyhow::Result;
@@ -222,7 +222,7 @@ async fn bulk_ban_members(ctx: &Context, args: &Value) -> String {
     let user_ids: Vec<UserId> = user_ids.into_iter().map(UserId::new).collect();
 
     match guild_id
-        .bulk_ban_users(&ctx.http, &user_ids, delete_message_seconds, reason.as_deref())
+        .bulk_ban(&ctx.http, &user_ids, delete_message_seconds, reason.as_deref())
         .await
     {
         Ok(result) => ok(to_value(&result)),
@@ -267,10 +267,10 @@ async fn modify_member(ctx: &Context, args: &Value) -> String {
         changed = true;
     }
     if let Some(true) = get_bool(args, "clear_timeout") {
-        builder = builder.disable_communication_until(serenity::all::Timestamp::now());
+        builder = builder.disable_communication_until(serenity::all::Timestamp::now().to_string());
         changed = true;
     } else if let Some(until) = args.get("communication_disabled_until").and_then(parse_timestamp) {
-        builder = builder.disable_communication_until(until);
+        builder = builder.disable_communication_until(until.to_string());
         changed = true;
     }
 
@@ -293,9 +293,9 @@ async fn timeout_member(ctx: &Context, args: &Value) -> String {
     };
 
     let builder = if let Some(true) = get_bool(args, "clear") {
-        EditMember::new().disable_communication_until(serenity::all::Timestamp::now())
+        EditMember::new().disable_communication_until(serenity::all::Timestamp::now().to_string())
     } else if let Some(until) = args.get("until").and_then(parse_timestamp) {
-        EditMember::new().disable_communication_until(until)
+        EditMember::new().disable_communication_until(until.to_string())
     } else {
         return err("Either 'until' or 'clear' is required");
     };

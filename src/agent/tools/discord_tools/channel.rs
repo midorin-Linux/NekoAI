@@ -1,6 +1,6 @@
 use crate::agent::tools::tools::build_tool;
 use crate::agent::tools::discord::{
-    err, get_bool, get_channel_id, get_guild_id, get_guild_id_default, get_string, get_u16, get_u32, get_u64, ok, parse_channel_type, to_value
+    err, get_bool, get_channel_id, get_guild_id_default, get_string, get_u16, get_u32, ok, parse_channel_type, to_value
 };
 
 use anyhow::Result;

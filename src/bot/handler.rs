@@ -1,7 +1,6 @@
 use crate::agent::agent::Agent;
 use std::sync::Arc;
 
-use owo_colors::OwoColorize;
 use serenity::{
     async_trait,
     model::{
