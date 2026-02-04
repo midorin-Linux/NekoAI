@@ -1,6 +1,6 @@
 pub mod agent;
 pub mod chat;
-mod context;
+pub mod context;
 mod memory;
 pub mod prompts;
-mod tools;
+pub mod tools;
