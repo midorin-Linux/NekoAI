@@ -1,24 +1,22 @@
-mod agent;
-mod bot;
-mod core;
-mod models;
-mod services;
-mod utils;
-
-use crate::utils::{config::Config, logger::init_tracing};
-
-use anyhow::Result;
+use anyhow::{Context, Result};
+use tracing::debug;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    println!("Application (Ver.0.0.1)");
+    println!("NekoAI (Ver. 0.0.2-alpha)\n");
 
-    let config = Config::load()
-        .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?;
-    let _ = init_tracing(config.clone())?;
+    let config = neko_ai::infrastructure::config::settings::Settings::load()
+        .context("Failed to load config")?;
 
-    let mut app = bot::client::App::new(config);
-    app.await.run().await?;
+    neko_ai::infrastructure::observability::logger::init_tracing(&config.log_level);
 
-    Ok(())
+    debug!("----------BEGIN SETTINGS----------");
+    debug!("{:#?}", &config);
+    debug!("----------END SETTINGS----------");
+
+    neko_ai::Application::new(config)
+        .await?
+        .run()
+        .await
+        .context("Failed to run application")
 }

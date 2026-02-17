@@ -1,24 +1,15 @@
 [package]
-name = "NekoAI"
-version = "0.0.1-alpha"
+name = "neko_ai"
+version = "0.0.2-alpha"
 edition = "2024"
 
 [dependencies]
 anyhow = "1.0.101"
-async-openai = { version = "0.32.4", features = ["full"] }
-chrono = "0.4.43"
 config = "0.15.19"
-dialoguer = "0.12.0"
 dotenvy = "0.15.7"
-indicatif = "0.18.4"
-meval = "0.2.0"
-owo-colors = "4.2.3"
 poise = "0.6.1"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
 serenity = { version = "0.12.5", features = ["full"] }
-sqlx = { version = "0.9.0-alpha.1", features = ["tls-rustls", "runtime-tokio", "sqlite"]}
-thiserror = "2.0.18"
+serde = { version = "1.0.228", features = ["derive"] }
 tokio = { version = "1.49.0", features = ["full"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt"] }
