@@ -17,17 +17,16 @@ pub struct Application {
 
 impl Application {
     pub async fn new(config: Config) -> Result<Self> {
-        let discord_client = DiscordClient::new(config.discord_token.clone()).await?;
+        let discord_client = DiscordClient::new(config.discord_token.clone(), config.guild_id).await?;
 
         Ok(Self {
             config,
-            discord_client
+            discord_client,
         })
     }
 
     pub async fn run(self) -> Result<()> {
-        let discord_client = self
-            .discord_client
+        self.discord_client
             .run()
             .await
             .context("Failed to run Discord client")?;

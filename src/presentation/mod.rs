@@ -1,2 +1,2 @@
-pub mod discord_handler;
 pub mod events;
+pub mod handler;

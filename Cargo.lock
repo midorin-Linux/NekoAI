@@ -1167,11 +1167,13 @@ name = "neko_ai"
 version = "0.0.2-alpha"
 dependencies = [
  "anyhow",
+ "async-trait",
  "config",
  "dotenvy",
  "poise",
  "serde",
  "serenity",
+ "thiserror 2.0.18",
  "tokio",
  "tracing",
  "tracing-subscriber",

@@ -6,3 +6,99 @@
 - **serenity**: [serenity-rs/serenity](https://github.com/serenity-rs/serenity) - A Rust library for the Discord API.
 - **poise**: [serenity-rs/poise](https://github.com/serenity-rs/poise) - Discord bot command framework for serenity, with advanced features like edit tracking and flexible argument parsing
 - **rig**: [0xPlaygrounds/rig](https://github.com/0xPlaygrounds/rig) - ⚙️🦀 Build modular and scalable LLM Applications in Rust
+
+## 全体のディレクトリ構造の構想
+```text
+NekoAI/
+├── .github/
+│   └── workflows/
+│       └── ci.yml
+│
+├── config/
+│   ├── settings.toml            # 環境非依存の設定
+│   └── settings.dev.toml        # 開発環境用オーバーライド
+│
+├── docs/
+│   ├── architecture.md
+│   └── setup.md
+│
+├── src/
+│   ├── main.rs                  # エントリポイント（DI組み立て・起動）
+│   ├── lib.rs                   # クレートルート（モジュール宣言）
+│   │
+│   ├── models/                  # 📦 全レイヤー共通のデータ型
+│   │   ├── mod.rs
+│   │   ├── message.rs           # メッセージ系の型
+│   │   ├── conversation.rs      # 会話コンテキストの型
+│   │   ├── agent.rs             # エージェント設定・プロファイル
+│   │   ├── command.rs           # スラッシュコマンド引数等の型
+│   │   └── error.rs             # 統一エラー型
+│   │
+│   ├── domain/                  # 💎 純粋なビジネスルール
+│   │   ├── mod.rs
+│   │   ├── conversation.rs      # 会話の長さ制限・要約判定等
+│   │   ├── permission.rs        # 応答可否・チャンネル制限ルール
+│   │   └── personality.rs       # エージェントの性格・トーン制御
+│   │
+│   ├── application/             # ⭐ ユースケース層
+│   │   ├── mod.rs
+│   │   ├── traits/              # インフラ層への抽象境界
+│   │   │   ├── mod.rs
+│   │   │   ├── ai_client.rs     # AI 推論トレイト
+│   │   │   └── message_store.rs # 会話履歴ストアトレイト
+│   │   ├── chat/
+│   │   │   ├── mod.rs
+│   │   │   ├── chat_service.rs          # 通常チャットのユースケース
+│   │   │   └── conversation_manager.rs  # 会話コンテキスト管理
+│   │   └── command/
+│   │       ├── mod.rs
+│   │       ├── command_registry.rs      # コマンド登録・ルーティング
+│   │       └── handlers/
+│   │           ├── mod.rs
+│   │           ├── help.rs              # /help
+│   │           ├── reset.rs             # /reset（会話リセット）
+│   │           └── config.rs            # /config（設定変更）
+│   │
+│   ├── infrastructure/          # 🔌 外部サービス接続の具象実装
+│   │   ├── mod.rs
+│   │   ├── ai/
+│   │   │   ├── mod.rs
+│   │   │   ├── rig_client.rs            # rig SDK ラッパー
+│   │   │   └── prompt_builder.rs        # システムプロンプト構築
+│   │   ├── discord/
+│   │   │   ├── mod.rs
+│   │   │   └── client.rs               # serenity Client 初期化
+│   │   └── store/
+│   │       ├── mod.rs
+│   │       └── in_memory_store.rs       # 会話履歴のインメモリ実装
+│   │
+│   ├── presentation/            # 🎭 Discord イベント受付
+│   │   ├── mod.rs
+│   │   ├── handler.rs                   # serenity EventHandler impl
+│   │   ├── events/
+│   │   │   ├── mod.rs
+│   │   │   ├── message.rs              # MESSAGE_CREATE
+│   │   │   ├── interaction.rs          # スラッシュコマンド INTERACTION_CREATE
+│   │   │   └── ready.rs               # READY
+│   │   └── formatter.rs                # AI応答 → Discord表示用に整形
+│   │
+│   └── shared/                  # 🛠 横断的関心事
+│       ├── mod.rs
+│       ├── config.rs                    # 設定読み込み (toml + env)
+│       └── logger.rs                    # tracing 初期化
+│
+├── tests/                       # 統合テスト
+│   ├── helpers/
+│   │   └── mod.rs               # テスト用モック・ユーティリティ
+│   ├── chat_service_test.rs
+│   └── command_test.rs
+│
+├── .env                         # シークレット（DISCORD_TOKEN, API_KEY 等）
+├── .env.example                 # .env のテンプレート
+├── .gitignore
+├── Cargo.toml
+├── Cargo.lock
+└── README.md
+
+// Anthropic Claude Opus 4.6で生成
+```
