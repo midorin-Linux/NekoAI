@@ -3,6 +3,7 @@ use rig::{completion::ToolDefinition, tool::Tool};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+#[allow(unused)]
 #[derive(Deserialize)]
 pub struct OperationArgs {
     content: String,
@@ -42,7 +43,7 @@ impl Tool for Test {
         }
     }
 
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+    async fn call(&self, _args: Self::Args) -> Result<Self::Output, Self::Error> {
         let result = "Succeccfly send message".to_string();
         Ok(result)
     }

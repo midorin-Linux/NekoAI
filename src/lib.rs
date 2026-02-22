@@ -11,7 +11,6 @@ use shared::config::Config;
 use anyhow::{Context, Result};
 
 pub struct Application {
-    config: Config,
     discord_client: DiscordClient,
 }
 
@@ -28,7 +27,6 @@ impl Application {
             DiscordClient::new(config.discord_token.clone(), config.guild_id, rig_client).await?;
 
         Ok(Self {
-            config,
             discord_client,
         })
     }
