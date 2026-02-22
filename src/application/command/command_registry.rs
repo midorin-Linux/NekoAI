@@ -1,6 +1,10 @@
 use crate::application::command::handlers::*;
+use crate::infrastructure::ai::rig_client::RigClient;
+use std::sync::Arc;
 
-pub struct Data {}
+pub struct Data {
+    pub rig_client: Arc<RigClient>,
+}
 
 pub type Context<'a> = poise::Context<'a, Data, anyhow::Error>;
 
@@ -18,8 +22,11 @@ async fn on_error(error: poise::FrameworkError<'_, Data, anyhow::Error>) {
     }
 }
 
-pub async fn command_framework(guild_id: u64) -> poise::framework::Framework<Data, anyhow::Error> {
-    let commands = vec![health::health()];
+pub async fn command_framework(
+    guild_id: u64,
+    rig_client: Arc<RigClient>,
+) -> poise::framework::Framework<Data, anyhow::Error> {
+    let commands = vec![chat::chat(), health::health()];
 
     poise::Framework::builder()
         .options(poise::FrameworkOptions {
@@ -50,7 +57,7 @@ pub async fn command_framework(guild_id: u64) -> poise::framework::Framework<Dat
                 )
                 .await
                 .unwrap();
-                Ok(Data {})
+                Ok(Data { rig_client })
             })
         })
         .build()

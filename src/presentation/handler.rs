@@ -1,4 +1,6 @@
+use crate::infrastructure::ai::rig_client::RigClient;
 use crate::presentation::events::*;
+use std::sync::Arc;
 
 use serenity::{
     async_trait,
@@ -6,7 +8,9 @@ use serenity::{
     prelude::*,
 };
 
-pub struct Handler {}
+pub struct Handler {
+    pub rig_client: Arc<RigClient>,
+}
 
 impl Handler {}
 
@@ -16,7 +20,7 @@ impl EventHandler for Handler {
         message_handler::message(ctx, new_message).await;
     }
 
-    async fn ready(&self, _ctx: Context, data_about_bot: Ready) {
-        ready_handler::ready(_ctx, data_about_bot).await;
+    async fn ready(&self, ctx: Context, data_about_bot: Ready) {
+        ready_handler::ready(ctx, data_about_bot).await;
     }
 }

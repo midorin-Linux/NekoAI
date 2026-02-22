@@ -16,7 +16,7 @@ pub struct DiscordMessageSendError;
 #[derive(Deserialize, Serialize)]
 pub struct Test;
 impl Tool for Test {
-    const NAME: &'static str = "add";
+    const NAME: &'static str = "send_message";
     type Error = DiscordMessageSendError;
     type Args = OperationArgs;
     type Output = String;
@@ -29,11 +29,11 @@ impl Tool for Test {
                 "type": "object",
                 "properties": {
                     "content": {
-                        "type": "text",
+                        "type": "string",
                         "description": "Message content"
                     },
                     "target_channel_id": {
-                        "type": "number",
+                        "type": "integer",
                         "description": "Target channel ID"
                     },
                 },
@@ -43,10 +43,6 @@ impl Tool for Test {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        println!(
-            "[tool-call] Adding {} and {}",
-            args.content, args.target_channel_id
-        );
         let result = "Succeccfly send message".to_string();
         Ok(result)
     }
