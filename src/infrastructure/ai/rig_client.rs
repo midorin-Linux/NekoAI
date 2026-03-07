@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
 use rig::{
@@ -6,8 +8,8 @@ use rig::{
     prelude::*,
     providers,
 };
+use serenity::all::Http;
 
-#[allow(unused_imports)]
 use crate::{
     application::traits::ai_client::AIClient,
     infrastructure::ai::tools::*,
@@ -26,6 +28,7 @@ impl RigClient {
         embed_api_key: String,
         nlp: NLP,
         embedding: Embedding,
+        discord_http: Arc<Http>,
     ) -> Result<Self> {
         let system_instruction =
             std::fs::read_to_string("INSTRUCTION.md").context("Failed to read INSTRUCTION.md")?;
@@ -39,7 +42,7 @@ impl RigClient {
         let nlp_client = openai_comp_nlp_client
             .agent(nlp.model_name)
             .preamble(system_instruction.as_str())
-            // .tool(send_message::SendMessage)
+            .tool(send_message::SendMessage::new(discord_http.clone()))
             .default_max_turns(10)
             .build();
 

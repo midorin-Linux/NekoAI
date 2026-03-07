@@ -1,54 +1,73 @@
-//! これはテスト用のダミーです
+use std::sync::Arc;
 
-use anyhow::Result;
 use rig::{completion::ToolDefinition, tool::Tool};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use serenity::all::{ChannelId, Http};
 
-#[allow(unused)]
+use super::error::DiscordToolError;
+
 #[derive(Deserialize)]
 pub struct OperationArgs {
     content: String,
-    target_channel_id: u64,
+    channel_id: u64,
 }
 
-#[derive(Debug, thiserror::Error)]
-#[error("Discord message send error")]
-pub struct DiscordMessageSendError;
+#[derive(Serialize, Deserialize)]
+pub struct SendMessage {
+    #[serde(skip)]
+    http: Option<Arc<Http>>,
+}
 
-#[derive(Deserialize, Serialize)]
-pub struct SendMessage;
+impl SendMessage {
+    pub fn new(http: Arc<Http>) -> Self {
+        Self { http: Some(http) }
+    }
+}
+
 impl Tool for SendMessage {
     const NAME: &'static str = "send_message";
-    type Error = DiscordMessageSendError;
+    type Error = DiscordToolError;
     type Args = OperationArgs;
     type Output = String;
 
-    #[allow(dead_code)]
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: "send_message".to_string(),
-            description: "Send message to target channel".to_string(),
+            description: "Send a message to a specified Discord channel by its channel ID."
+                .to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
                     "content": {
                         "type": "string",
-                        "description": "Message content"
+                        "description": "The message content to send"
                     },
-                    "target_channel_id": {
+                    "channel_id": {
                         "type": "integer",
-                        "description": "Target channel ID"
-                    },
+                        "description": "The Discord channel ID to send the message to"
+                    }
                 },
-                "required": ["content", "target_channel_id"],
+                "required": ["content", "channel_id"]
             }),
         }
     }
 
-    #[allow(dead_code)]
-    async fn call(&self, _args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let result = "Successfully sent message".to_string();
-        Ok(result)
+    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        let http = self.http.as_ref().ok_or_else(|| {
+            DiscordToolError::new("send_message", "Discord HTTP client not available")
+        })?;
+
+        let channel_id = ChannelId::new(args.channel_id);
+
+        channel_id
+            .say(http.as_ref(), &args.content)
+            .await
+            .map_err(|e| DiscordToolError::new("send_message", e.to_string()))?;
+
+        Ok(format!(
+            "Successfully sent message to channel {}",
+            args.channel_id
+        ))
     }
 }

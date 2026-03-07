@@ -16,6 +16,7 @@ use infrastructure::{
     discord::client::DiscordClient,
     store::{in_memory_store::InMemoryStore, vector_store::VectorStore},
 };
+use serenity::all::Http;
 use shared::config::Config;
 use tokio::time::{Duration, interval};
 
@@ -25,12 +26,16 @@ pub struct Application {
 
 impl Application {
     pub async fn new(config: Config) -> Result<Self> {
+        // Discord HTTP クライアントを先に生成し、AI ツールに共有する
+        let discord_http = Arc::new(Http::new(&config.discord_token));
+
         let ai_client: Arc<dyn AIClient> = Arc::new(
             RigClient::new(
                 config.nlp_token.clone(),
                 config.embed_token.clone(),
                 config.nlp.clone(),
                 config.embedding.clone(),
+                discord_http,
             )
             .await?,
         );
