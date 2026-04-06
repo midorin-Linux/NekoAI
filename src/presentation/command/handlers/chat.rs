@@ -21,6 +21,7 @@ pub async fn chat(
         channel_id,
         user_id,
         prompt,
+        &data.memory_config,
     )
     .await
     {

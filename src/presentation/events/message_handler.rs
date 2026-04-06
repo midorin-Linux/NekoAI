@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use serenity::all::{Context, Message};
 
 use crate::{
@@ -7,7 +9,7 @@ use crate::{
             ai_client::AIClient, long_term_store::LongTermStore, short_term_store::ShortTermStore,
         },
     },
-    shared::discord_utils::split_message,
+    shared::{config::MemoryConfig, discord_utils::split_message, rate_limiter::RateLimiter},
 };
 
 pub async fn message(
@@ -16,6 +18,8 @@ pub async fn message(
     ai_client: &dyn AIClient,
     short_term_store: &dyn ShortTermStore,
     long_term_store: &dyn LongTermStore,
+    memory_config: &MemoryConfig,
+    rate_limiter: &Arc<RateLimiter>,
 ) {
     if new_message.author.bot {
         return;
@@ -25,6 +29,24 @@ pub async fn message(
     let mentioned = new_message.mentions.iter().any(|u| u.id == bot_id);
 
     if !mentioned {
+        return;
+    }
+
+    let user_id = new_message.author.id.get();
+
+    // レート制限チェック
+    if !rate_limiter.check_and_consume(user_id) {
+        tracing::warn!(user_id, "Rate limited user");
+        if let Err(e) = new_message
+            .channel_id
+            .say(
+                &ctx.http,
+                "少し待ってからもう一度試してください。(Please wait a moment before trying again.)",
+            )
+            .await
+        {
+            tracing::error!("Error sending rate limit message: {:?}", e);
+        }
         return;
     }
 
@@ -44,7 +66,6 @@ pub async fn message(
     let _typing = new_message.channel_id.start_typing(&ctx.http);
 
     let channel_id = new_message.channel_id.get();
-    let user_id = new_message.author.id.get();
 
     let reply = match process_message(
         ai_client,
@@ -53,6 +74,7 @@ pub async fn message(
         channel_id,
         user_id,
         content,
+        memory_config,
     )
     .await
     {

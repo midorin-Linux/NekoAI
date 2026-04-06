@@ -8,7 +8,7 @@ use rig::{
     prelude::*,
     providers,
 };
-use serenity::all::Http;
+use serenity::all::{Cache, Http};
 
 use crate::{
     application::traits::ai_client::AIClient,
@@ -29,6 +29,7 @@ impl RigClient {
         nlp: NLP,
         embedding: Embedding,
         discord_http: Arc<Http>,
+        discord_cache: Arc<Cache>,
     ) -> Result<Self> {
         let system_instruction =
             std::fs::read_to_string("INSTRUCTION.md").context("Failed to read INSTRUCTION.md")?;
@@ -39,11 +40,89 @@ impl RigClient {
             .build()
             .context("Failed to build openai nlp client")?;
 
+        // リマインダーストアを作成
+        let reminder_store = reminder::new_reminder_store();
+
         let nlp_client = openai_comp_nlp_client
             .agent(nlp.model_name)
             .preamble(system_instruction.as_str())
+            // ── 既存ツール ──
             .tool(send_message::SendMessage::new(discord_http.clone()))
-            .default_max_turns(10)
+            // ── チャンネル管理 ──
+            .tool(channel::GetChannelInfo::new(discord_http.clone()))
+            .tool(channel::ListChannels::new(
+                discord_http.clone(),
+                discord_cache.clone(),
+            ))
+            .tool(channel::CreateChannel::new(
+                discord_http.clone(),
+                discord_cache.clone(),
+            ))
+            .tool(channel::EditChannelTool::new(
+                discord_http.clone(),
+                discord_cache.clone(),
+            ))
+            .tool(channel::DeleteChannel::new(
+                discord_http.clone(),
+                discord_cache.clone(),
+            ))
+            // ── ロール管理 ──
+            .tool(role::ListRoles::new(discord_cache.clone()))
+            .tool(role::GetRoleInfo::new(discord_cache.clone()))
+            .tool(role::AssignRole::new(
+                discord_http.clone(),
+                discord_cache.clone(),
+            ))
+            .tool(role::RemoveRole::new(
+                discord_http.clone(),
+                discord_cache.clone(),
+            ))
+            // ── メンバー情報 ──
+            .tool(member::GetMemberInfo::new(discord_http.clone()))
+            .tool(member::SearchMembers::new(discord_http.clone()))
+            // ── メッセージ管理 ──
+            .tool(message::GetMessage::new(discord_http.clone()))
+            .tool(message::EditMessageTool::new(discord_http.clone()))
+            .tool(message::DeleteMessage::new(
+                discord_http.clone(),
+                discord_cache.clone(),
+            ))
+            .tool(message::PinMessage::new(discord_http.clone()))
+            .tool(message::AddReaction::new(discord_http.clone()))
+            .tool(message::SendReply::new(discord_http.clone()))
+            // ── ボイスチャンネル ──
+            .tool(voice::GetVoiceChannelInfo::new(discord_http.clone()))
+            .tool(voice::ListVoiceMembers::new(discord_cache.clone()))
+            // ── Embed 送信 ──
+            .tool(embed::SendEmbed::new(discord_http.clone()))
+            // ── サーバー情報 ──
+            .tool(server::GetServerInfo::new(discord_cache.clone()))
+            .tool(server::GetServerStats::new(discord_cache.clone()))
+            // ── リマインダー ──
+            .tool(reminder::SetReminder::new(
+                discord_http.clone(),
+                reminder_store.clone(),
+            ))
+            .tool(reminder::ListReminders::new(reminder_store.clone()))
+            .tool(reminder::CancelReminder::new(reminder_store.clone()))
+            // ── モデレーション ──
+            .tool(moderation::KickMember::new(
+                discord_http.clone(),
+                discord_cache.clone(),
+            ))
+            .tool(moderation::BanMember::new(
+                discord_http.clone(),
+                discord_cache.clone(),
+            ))
+            .tool(moderation::TimeoutMember::new(
+                discord_http.clone(),
+                discord_cache.clone(),
+            ))
+            .tool(moderation::WarnMember::new(
+                discord_http.clone(),
+                discord_cache.clone(),
+            ))
+            .default_max_turns(nlp.max_agent_turns)
             .build();
 
         let openai_comp_embed_client = providers::openai::Client::builder()

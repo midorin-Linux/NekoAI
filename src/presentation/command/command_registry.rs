@@ -5,12 +5,14 @@ use crate::{
         ai_client::AIClient, long_term_store::LongTermStore, short_term_store::ShortTermStore,
     },
     presentation::command::handlers::*,
+    shared::config::MemoryConfig,
 };
 
 pub struct Data {
     pub ai_client: Arc<dyn AIClient>,
     pub short_term_store: Arc<dyn ShortTermStore>,
     pub long_term_store: Arc<dyn LongTermStore>,
+    pub memory_config: MemoryConfig,
 }
 
 pub type Context<'a> = poise::Context<'a, Data, anyhow::Error>;
@@ -34,6 +36,7 @@ pub async fn command_framework(
     ai_client: Arc<dyn AIClient>,
     short_term_store: Arc<dyn ShortTermStore>,
     long_term_store: Arc<dyn LongTermStore>,
+    memory_config: MemoryConfig,
 ) -> poise::framework::Framework<Data, anyhow::Error> {
     let commands = vec![chat::chat(), health::health()];
 
@@ -69,6 +72,7 @@ pub async fn command_framework(
                     ai_client,
                     short_term_store,
                     long_term_store,
+                    memory_config,
                 })
             })
         })

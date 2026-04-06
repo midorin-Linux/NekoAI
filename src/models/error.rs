@@ -23,6 +23,15 @@ pub enum AppError {
     #[error("Permission denied: {reason}")]
     PermissionDenied { reason: String },
 
+    #[error("Rate limited: {0}")]
+    RateLimited(String),
+
+    #[error("Tool execution error: {tool_name} - {message}")]
+    ToolExecution { tool_name: String, message: String },
+
+    #[error("Validation error: {0}")]
+    Validation(String),
+
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
 }
@@ -37,6 +46,11 @@ impl AppError {
             AppError::Config(_) => "設定の読み込みに失敗しました。",
             AppError::ConversationNotFound(_) => "会話が見つかりませんでした。",
             AppError::PermissionDenied { .. } => "権限がありません。",
+            AppError::RateLimited(_) => {
+                "リクエストが多すぎます。少し待ってから再試行してください。"
+            }
+            AppError::ToolExecution { .. } => "ツールの実行に失敗しました。",
+            AppError::Validation(_) => "入力が不正です。",
             AppError::Internal(_) => "予期しないエラーが発生しました。",
         }
     }

@@ -18,10 +18,12 @@ const LONGTERM_COLLECTION_NAME: &str = "longterm_memory";
 
 pub struct VectorStore {
     qdrant_client: Qdrant,
+    /// 検索結果の最低スコア閾値（これ未満のスコアの結果を除外する）
+    min_search_score: f32,
 }
 
 impl VectorStore {
-    pub async fn new(url: &str, dimension: u64) -> Result<Self> {
+    pub async fn new(url: &str, dimension: u64, min_search_score: f32) -> Result<Self> {
         let client = Qdrant::from_url(url).build()?;
 
         if !client.collection_exists(MIDTERM_COLLECTION_NAME).await? {
@@ -44,6 +46,7 @@ impl VectorStore {
 
         Ok(Self {
             qdrant_client: client,
+            min_search_score,
         })
     }
 }
@@ -102,6 +105,7 @@ impl LongTermStore for VectorStore {
                         user_id as i64,
                     )]))
                     .limit(limit)
+                    .score_threshold(self.min_search_score)
                     .with_payload(true),
             )
             .await?;
@@ -132,6 +136,7 @@ impl LongTermStore for VectorStore {
                         user_id as i64,
                     )]))
                     .limit(limit)
+                    .score_threshold(self.min_search_score)
                     .with_payload(true),
             )
             .await?;

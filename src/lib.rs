@@ -8,15 +8,11 @@ pub mod shared;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use application::traits::{
-    ai_client::AIClient, long_term_store::LongTermStore, short_term_store::ShortTermStore,
-};
+use application::traits::{long_term_store::LongTermStore, short_term_store::ShortTermStore};
 use infrastructure::{
-    ai::rig_client::RigClient,
     discord::client::DiscordClient,
     store::{in_memory_store::InMemoryStore, vector_store::VectorStore},
 };
-use serenity::all::Http;
 use shared::config::Config;
 use tokio::time::{Duration, interval};
 
@@ -26,26 +22,16 @@ pub struct Application {
 
 impl Application {
     pub async fn new(config: Config) -> Result<Self> {
-        // Discord HTTP クライアントを先に生成し、AI ツールに共有する
-        let discord_http = Arc::new(Http::new(&config.discord_token));
-
-        let ai_client: Arc<dyn AIClient> = Arc::new(
-            RigClient::new(
-                config.nlp_token.clone(),
-                config.embed_token.clone(),
-                config.nlp.clone(),
-                config.embedding.clone(),
-                discord_http,
-            )
-            .await?,
-        );
-
         let short_term_store: Arc<dyn ShortTermStore> =
             Arc::new(InMemoryStore::new(config.nlp.max_short_term_messages));
         let long_term_store: Arc<dyn LongTermStore> = Arc::new(
-            VectorStore::new(&config.qdrant_url, config.embedding.dimension)
-                .await
-                .context("Failed to connect to Qdrant")?,
+            VectorStore::new(
+                &config.qdrant_url,
+                config.embedding.dimension,
+                config.memory.min_search_score,
+            )
+            .await
+            .context("Failed to connect to Qdrant")?,
         );
 
         spawn_cleanup_task(long_term_store.clone());
@@ -53,7 +39,12 @@ impl Application {
         let discord_client = DiscordClient::new(
             config.discord_token.clone(),
             config.guild_id,
-            ai_client,
+            config.nlp_token.clone(),
+            config.embed_token.clone(),
+            config.nlp.clone(),
+            config.embedding.clone(),
+            config.memory.clone(),
+            config.rate_limit.clone(),
             short_term_store,
             long_term_store,
         )

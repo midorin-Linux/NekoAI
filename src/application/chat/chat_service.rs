@@ -7,6 +7,7 @@ use crate::{
         ai_client::AIClient, long_term_store::LongTermStore, short_term_store::ShortTermStore,
     },
     models::{error::AppError, memory::*},
+    shared::config::MemoryConfig,
 };
 
 pub async fn process_message(
@@ -16,6 +17,7 @@ pub async fn process_message(
     channel_id: u64,
     user_id: u64,
     user_message: String,
+    memory_config: &MemoryConfig,
 ) -> Result<String, AppError> {
     let in_memory_context = short_term_store.get_context(channel_id).await;
 
@@ -24,15 +26,17 @@ pub async fn process_message(
         .await
         .map_err(|e| AppError::Embedding(e.to_string()))?;
 
-    let midterm_results = long_term_store
-        .search_midterm(query_embedding.clone(), user_id, 3)
-        .await
-        .map_err(|e| AppError::Store(e.to_string()))?;
+    // 中期・長期メモリの検索を並行実行
+    let midterm_limit = memory_config.midterm_search_limit as u64;
+    let longterm_limit = memory_config.longterm_search_limit as u64;
 
-    let longterm_results = long_term_store
-        .search_longterm(query_embedding.clone(), user_id, 5)
-        .await
-        .map_err(|e| AppError::Store(e.to_string()))?;
+    let (midterm_result, longterm_result) = tokio::join!(
+        long_term_store.search_midterm(query_embedding.clone(), user_id, midterm_limit),
+        long_term_store.search_longterm(query_embedding.clone(), user_id, longterm_limit),
+    );
+
+    let midterm_results = midterm_result.map_err(|e| AppError::Store(e.to_string()))?;
+    let longterm_results = longterm_result.map_err(|e| AppError::Store(e.to_string()))?;
 
     let (prompt_message, chat_history) = build_messages(
         &user_message,
@@ -49,6 +53,8 @@ pub async fn process_message(
         .map_err(|e| AppError::AIGeneration(e.to_string()))?;
 
     let now = current_timestamp();
+    let midterm_expiry_secs = (memory_config.midterm_expiry_days * 24 * 60 * 60) as i64;
+
     let user_msg = ShortTermMessage {
         role: Role::User,
         user_id,
@@ -56,8 +62,15 @@ pub async fn process_message(
         timestamp: now,
     };
     let overflow = short_term_store.push(channel_id, user_msg).await;
-    let fail_count =
-        promote_overflow(ai_client, long_term_store, user_id, channel_id, overflow).await;
+    let fail_count = promote_overflow(
+        ai_client,
+        long_term_store,
+        user_id,
+        channel_id,
+        overflow,
+        midterm_expiry_secs,
+    )
+    .await;
     if fail_count > 0 {
         tracing::warn!(
             "promote_overflow: {fail_count} user message(s) failed to promote to midterm memory"
@@ -71,8 +84,15 @@ pub async fn process_message(
         timestamp: current_timestamp(),
     };
     let overflow = short_term_store.push(channel_id, assistant_msg).await;
-    let fail_count =
-        promote_overflow(ai_client, long_term_store, user_id, channel_id, overflow).await;
+    let fail_count = promote_overflow(
+        ai_client,
+        long_term_store,
+        user_id,
+        channel_id,
+        overflow,
+        midterm_expiry_secs,
+    )
+    .await;
     if fail_count > 0 {
         tracing::warn!(
             "promote_overflow: {fail_count} assistant message(s) failed to promote to midterm memory"
@@ -88,6 +108,7 @@ async fn promote_overflow(
     user_id: u64,
     channel_id: u64,
     overflow: Vec<ShortTermMessage>,
+    expiry_secs: i64,
 ) -> usize {
     let mut fail_count = 0usize;
 
@@ -113,7 +134,7 @@ async fn promote_overflow(
             channel_id,
             summary,
             created_at: now,
-            expires_at: now + 60 * 60 * 24 * 7, // 7日
+            expires_at: now + expiry_secs,
         };
 
         if let Err(err) = long_term_store.store_midterm(memory, embedding).await {

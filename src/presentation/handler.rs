@@ -11,12 +11,15 @@ use crate::{
         ai_client::AIClient, long_term_store::LongTermStore, short_term_store::ShortTermStore,
     },
     presentation::events::*,
+    shared::{config::MemoryConfig, rate_limiter::RateLimiter},
 };
 
 pub struct Handler {
     pub ai_client: Arc<dyn AIClient>,
     pub short_term_store: Arc<dyn ShortTermStore>,
     pub long_term_store: Arc<dyn LongTermStore>,
+    pub memory_config: MemoryConfig,
+    pub rate_limiter: Arc<RateLimiter>,
 }
 
 #[async_trait]
@@ -28,6 +31,8 @@ impl EventHandler for Handler {
             self.ai_client.as_ref(),
             self.short_term_store.as_ref(),
             self.long_term_store.as_ref(),
+            &self.memory_config,
+            &self.rate_limiter,
         )
         .await;
     }
