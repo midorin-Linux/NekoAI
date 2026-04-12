@@ -4,10 +4,7 @@ use tracing::{debug, error, info};
 use crate::{command_router::Context, commands::utils::session_resolver};
 
 #[poise::command(prefix_command, slash_command)]
-pub async fn clear(
-    ctx: Context<'_>,
-    #[description = "Prompt"] prompt: String,
-) -> anyhow::Result<()> {
+pub async fn clear(ctx: Context<'_>) -> anyhow::Result<()> {
     if ctx.author().bot {
         debug!(user_id = %ctx.author().id, "ignored bot invocation");
         return Ok(());
@@ -16,8 +13,7 @@ pub async fn clear(
     info!(
         user_id = %ctx.author().id,
         channel_id = %ctx.channel_id(),
-        prompt_len = prompt.len(),
-        "processing ask command"
+        "processing clear command"
     );
 
     ctx.defer().await?;

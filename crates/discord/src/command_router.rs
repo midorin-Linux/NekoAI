@@ -1,6 +1,6 @@
 use agent::runtime::AgentRuntime;
 
-use crate::commands::ask;
+use crate::commands::{ask, clear};
 
 pub struct Data {
     pub agent_runtime: AgentRuntime,
@@ -33,7 +33,7 @@ pub async fn command_framework(
     guild_id: u64,
     agent_runtime: AgentRuntime,
 ) -> poise::framework::Framework<Data, anyhow::Error> {
-    let commands = vec![ask()];
+    let commands = vec![ask(), clear()];
 
     poise::Framework::builder()
         .options(poise::FrameworkOptions {
