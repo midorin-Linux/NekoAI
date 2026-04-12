@@ -1,79 +1,75 @@
 # NekoAI
-これはRustで書かれている**Discord用AIエージェント**です。**OpenAI互換API**を使用して動作させることができ、メモリ管理（長期・中期・短期記憶）とツール実行機能を備えた高度なチャットボットです。
 
-開発では[OpenRouter](https://openrouter.ai/)を使用することを推奨しています。
+NekoAI は Rust で開発されている **Discord 用 AI エージェント** です。
+[Rig SDK](https://github.com/0xPlaygrounds/rig) を基盤とし、強力なメモリ管理（長期・中期・短期記憶）とツール実行機能を備えた、拡張性の高いチャットボットを提供します。
 
-## 特徴
+## 主な特徴
+
 - **階層型メモリシステム:**
-    - **短期記憶:** 最新の会話コンテキストを保持（インメモリストア）。
-    - **中期記憶:** 過去の会話の要約をベクトル検索（Qdrant）で取得。7日間の有効期限付きで自動クリーンアップ。
-    - **長期記憶:** ユーザーに関する永続的な事実をベクトル検索で取得。
-- **マルチモーダル対話:** スラッシュコマンド（`/chat`）とメンション応答の両方に対応。
-- **自動メッセージ分割:** Discordの2000文字制限を超える長い応答を適切に分割して送信。
-- **拡張可能なツール機能:** Rig SDKを活用したエージェントツール（例: `send_message`）を搭載。
-- **クリーンアーキテクチャ:** レイヤードアーキテクチャを採用し、DI（依存性の注入）により各コンポーネントが抽象化されています。
+    - **短期記憶:** 最新の会話コンテキストを DashMap でインメモリ保持。
+    - **中期記憶:** 過去の会話の要約を Qdrant 等のベクトル DB で管理。
+    - **長期記憶:** ユーザーに関する重要な事実を永続化。
+- **マルチモーダル対話:** スラッシュコマンド（`/ask`, `/clear`）による直感的な操作。
+- **堅牢なアーキテクチャ:** Cargo Workspace を採用し、ドメイン・インフラ・アプリケーション層を明確に分離。
+- **インタラクティブな起動:** 初回起動時に CLI によるセットアップウィザードを提供。
 
 ## 技術スタック
-- **serenity**: [serenity-rs/serenity](https://github.com/serenity-rs/serenity) - A Rust library for the Discord API.
-- **poise**: [serenity-rs/poise](https://github.com/serenity-rs/poise) - Discord bot command framework for serenity, with advanced features like edit tracking and flexible argument parsing
-- **rig**: [0xPlaygrounds/rig](https://github.com/0xPlaygrounds/rig) - ⚙️🦀 Build modular and scalable LLM Applications in Rust
 
-## 環境構築・使用方法
+- **[Rig](https://github.com/0xPlaygrounds/rig)**: エージェント構築・LLM 抽象化
+- **[Serenity](https://github.com/serenity-rs/serenity)**: Discord API クライアント
+- **[Qdrant](https://qdrant.tech/)**: ベクトル検索エンジン（記憶層）
+- **[Tokio](https://tokio.rs/)**: 非同期ランタイム
+- **[Tracing](https://github.com/tokio-rs/tracing)**: 構造化ログ
 
-### 1. プロジェクトの初期設定
+## ディレクトリ構造
+
+プロジェクトは複数のクレートで構成されています。詳細は [architecture.md](docs/architecture.md) を参照してください。
+
+```text
+NekoAI/
+├── crates/
+│   ├── agent/       # Rig を使用したエージェントの推論ループ・セッション管理
+│   ├── cli/         # エントリポイント・コマンドラインインターフェース
+│   ├── config/      # 設定ファイルのロード・検証 (.config/config.json)
+│   ├── discord/     # Serenity による Discord イベント処理・コマンドルーティング
+│   ├── domain/      # ビジネスロジック・共通のデータ型定義
+│   ├── infra/       # ログ、DB 接続、外部サービスとの通信
+│   ├── memory/      # 3層記憶（短期・中期・長期）の統合インターフェース
+│   ├── tools/       # エージェントが実行可能なツール群
+│   └── (setup)/     # 初回 TUI セットアップウィザード（予定）
+├── docs/            # アーキテクチャ設計書・ドキュメント
+└── target/          # ビルド成果物
+```
+
+## セットアップ
+
+### 1. 必要条件
+- [Rust](https://www.rust-lang.org/) (latest stable)
+- [Qdrant](https://qdrant.tech/) (ベクトル検索を使用する場合)
+- [just](https://github.com/casey/just)
+
+### 2. インストール
 ```bash
 git clone https://github.com/midorin-Linux/NekoAI.git
 cd NekoAI
-cp .env.example .env
-```
-`.env` と `config/settings.toml` を開き、APIキーや接続情報を設定してください。
-
-### 2. Qdrant の起動
-```bash
-docker pull qdrant/qdrant
-docker run -p 6333:6333 -p 6334:6334 -e QDRANT__SERVICE__GRPC_PORT="6334" qdrant/qdrant
 ```
 
-### 3. アプリケーションの起動
+### 3. 設定
+初回起動時に設定ファイル `.config/config.json` がない場合、インタラクティブなセットアップが開始されます。
+
+### 4. 実行
 ```bash
 # 開発用
-cargo run
-
-# 本番用
-cargo run --release
-```
-
-## ディレクトリ構造
-```text
-NekoAI/
-├── config/
-│   └── settings.toml           # 環境非依存の設定
-├── src/
-│   ├── application/            # ユースケース・ビジネスロジック
-│   │   ├── chat/               # チャット処理（コンテキスト構築・AI呼び出し）
-│   │   ├── command/            # Poiseコマンド定義と登録
-│   │   └── traits/             # 抽象化トレイト（DI用）
-│   ├── infrastructure/         # 外部サービス・DBの実装
-│   │   ├── ai/                 # Rigクライアント・エージェントツール
-│   │   ├── discord/            # Serenityクライアント
-│   │   └── store/              # Qdrant/インメモリストア実装
-│   ├── presentation/           # 外部インターフェース
-│   │   └── events/             # Discordイベントハンドラー
-│   ├── models/                 # ドメインモデル・エラー定義
-│   └── shared/                 # 設定・ロガー・ユーティリティ
-├── INSTRUCTION.md              # AI用システム命令
-└── tests/                      # テストコード
+just neko start
 ```
 
 ## 開発
-### テストの実行
+
+### フォーマットとリンター
 ```bash
-cargo test
+just fmt
+cargo clippy -- -D warnings
 ```
 
-### リンターとフォーマット
-フォーマットにはUnstableな項目が使われているため、Nightlyバージョンを使用してください。
-```bash
-cargo clippy -- -D warnings
-cargo +nightly fmt --all --check
-```
+## ライセンス
+[Apache-2.0](LICENSE)
