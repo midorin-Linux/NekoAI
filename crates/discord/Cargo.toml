@@ -7,5 +7,10 @@ license.workspace = true
 [dependencies]
 agent = { workspace = true }
 anyhow = { workspace = true }
+dialoguer = { workspace = true }
 domain = { workspace = true }
+indicatif = { workspace = true }
 serenity = { workspace = true }
+tracing = { workspace = true }
+
+poise = "0.6.1"

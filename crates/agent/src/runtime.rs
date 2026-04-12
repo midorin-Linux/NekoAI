@@ -12,6 +12,7 @@ pub struct AgentResponse {
     pub content: String,
 }
 
+#[derive(Clone)]
 pub struct AgentRuntime {
     session_manager: Arc<Mutex<SessionManager>>,
     context_manager: Arc<ContextManager>,
@@ -25,7 +26,7 @@ impl AgentRuntime {
         let session_manager = Arc::new(Mutex::new(SessionManager::new()));
 
         let context_manager = Arc::new(ContextManager::new(
-            "You are helpful assistant.".to_string(),
+            "You are an helpful assistant.".to_string(),
             16384,
             0.7,
         ));

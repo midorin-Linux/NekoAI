@@ -2,6 +2,7 @@ pub mod commands;
 
 use agent::runtime::AgentRuntime;
 use clap::Command;
+use indicatif::{ProgressBar, ProgressStyle};
 use discord::client::DiscordClient;
 
 fn cli() -> Command {

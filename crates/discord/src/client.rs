@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use agent::runtime::AgentRuntime;
 use anyhow::{Context, Result};
+use indicatif::{ProgressBar, ProgressStyle};
 use serenity::prelude::*;
 
 use crate::handler::Handler;
@@ -16,6 +17,14 @@ impl DiscordClient {
         guild_id: u64,
         agent_runtime: AgentRuntime,
     ) -> Result<Self> {
+        let spinner = ProgressBar::new_spinner();
+        spinner.set_style(
+            ProgressStyle::default_spinner()
+                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
+                .template("    {spinner} Starting discord client...")?,
+        );
+        spinner.enable_steady_tick(std::time::Duration::from_millis(120));
+        
         let intents = GatewayIntents::GUILDS
             | GatewayIntents::GUILD_MESSAGES
             | GatewayIntents::MESSAGE_CONTENT
@@ -27,8 +36,14 @@ impl DiscordClient {
 
         let _shared_cache = Arc::new(serenity::all::Cache::new());
 
+        let command_framework = crate::command_router::command_framework(
+            guild_id,
+            agent_runtime.clone(),
+        ).await;
+
         let discord_client = Client::builder(&discord_token, intents)
-            .event_handler(Handler { agent_runtime })
+            .event_handler(Handler { agent_runtime, spinner })
+            .framework(command_framework)
             .await?;
 
         Ok(Self { discord_client })

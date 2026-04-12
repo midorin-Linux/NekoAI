@@ -13,3 +13,5 @@ domain = { workspace = true }
 memory = { workspace = true }
 rig-core = { workspace = true }
 serenity = { workspace = true }
+
+serde = { version = "1.0.228", features = ["derive"] }
