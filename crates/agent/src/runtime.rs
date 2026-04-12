@@ -27,8 +27,11 @@ impl AgentRuntime {
         info!("initializing agent runtime");
         let session_manager = Arc::new(Mutex::new(SessionManager::new()));
 
+        let system_instruction =
+            std::fs::read_to_string(".config/INSTRUCTION.md").context("failed to read system instruction")?;
+
         let context_manager = Arc::new(ContextManager::new(
-            "You are an helpful assistant.".to_string(),
+            system_instruction,
             16384,
             0.7,
         ));
