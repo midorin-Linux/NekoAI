@@ -1,0 +1,10 @@
+[package]
+name = "config"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+config = "0.15.22"
+serde = { workspace = true }
