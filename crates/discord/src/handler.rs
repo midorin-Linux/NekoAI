@@ -75,6 +75,9 @@ impl EventHandler for Handler {
 
     async fn ready(&self, _ctx: Context, data_about_bot: Ready) {
         self.spinner.finish_and_clear();
-        println!("Discord client ready! Logged in as {}", data_about_bot.user.name);
+        println!(
+            "Discord client ready! Logged in as {}",
+            data_about_bot.user.name
+        );
     }
 }

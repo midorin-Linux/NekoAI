@@ -1,6 +1,7 @@
-use crate::command_router::Context;
 use domain::agent::session::{SessionKey, SessionKind};
 use serenity::all::{Channel, ChannelType};
+
+use crate::command_router::Context;
 
 #[poise::command(prefix_command, slash_command)]
 pub async fn ask(ctx: Context<'_>, #[description = "Prompt"] prompt: String) -> anyhow::Result<()> {
@@ -73,7 +74,7 @@ pub fn split_message(text: &str) -> Vec<&str> {
             break;
         }
 
-        let split_at = remaining[..DISCORD_MAX_LENGTH]
+        let split_at = remaining[.. DISCORD_MAX_LENGTH]
             .rfind('\n')
             .map(|pos| pos + 1)
             .unwrap_or(DISCORD_MAX_LENGTH);

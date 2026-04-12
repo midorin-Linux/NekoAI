@@ -55,10 +55,8 @@ pub async fn command_framework(
                     &framework.options().commands,
                     guild_id.into(),
                 )
-                    .await?;
-                Ok(Data {
-                    agent_runtime
-                })
+                .await?;
+                Ok(Data { agent_runtime })
             })
         })
         .build()
