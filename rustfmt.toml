@@ -1,5 +1,4 @@
 edition = "2024"
 imports_granularity = "Crate"
 group_imports = "StdExternalCrate"
-required_version = "1.8.0"
 spaces_around_ranges = true
