@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 use chrono::Utc;
 use dashmap::DashMap;
 use domain::agent::session::SessionKey;
+use tracing::debug;
 
 #[derive(Debug, Clone)]
 pub enum Role {
@@ -32,6 +33,11 @@ impl ShortTermMemory {
     }
 
     pub fn push_turn(&self, session_key: &SessionKey, user: &str, assistant: &str) {
+        debug!(
+            session = %session_key.channel_id,
+            max_entry = self.max_entry,
+            "storing short-term conversation turn"
+        );
         let mut query = self
             .store
             .entry(session_key.clone())
@@ -50,5 +56,7 @@ impl ShortTermMemory {
         while query.len() > self.max_entry {
             query.pop_front();
         }
+
+        debug!(session = %session_key.channel_id, entry_count = query.len(), "short-term memory updated");
     }
 }

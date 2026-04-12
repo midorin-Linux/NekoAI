@@ -29,6 +29,7 @@ memory = { path = "crates/memory" }
 tools = { path = "crates/tools" }
 
 anyhow = "1.0.102"
+colored = "3.1.1"
 chrono = "0.4.44"
 dashmap = "7.0.0-rc2"
 dialoguer = "0.12.0"

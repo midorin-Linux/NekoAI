@@ -1,4 +1,5 @@
 use crate::session::{ConversationTurn, Session};
+use tracing::debug;
 
 pub struct Context {
     pub system_prompt: String,
@@ -23,12 +24,22 @@ impl ContextManager {
     }
 
     pub async fn build(&self, session: &Session, input: &str) -> Context {
+        debug!(
+            input_len = input.len(),
+            session_turns = session.turns.len(),
+            max_tokens = self.max_tokens,
+            "building prompt context"
+        );
         let mut turns = session.turns.clone();
 
         let max_turns = (self.max_tokens / 512).max(1);
         if turns.len() > max_turns {
             let drain_count = turns.len() - max_turns;
-            turns.drain(0 .. drain_count);
+            turns.drain(0..drain_count);
+            debug!(
+                drained_turns = drain_count,
+                "compacted conversation turns for context"
+            );
         }
 
         let system_prompt = self.base_system_prompt.clone();

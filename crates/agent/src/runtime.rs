@@ -5,6 +5,7 @@ use config::loader::Config;
 use domain::agent::session::SessionKey;
 use memory::store::MemoryStore;
 use rig::completion::Prompt;
+use tracing::{debug, info};
 
 use crate::{context::ContextManager, provider::OpenRouterAdapter, session::SessionManager};
 
@@ -23,6 +24,7 @@ pub struct AgentRuntime {
 
 impl AgentRuntime {
     pub async fn new(config: Config, memory_store: MemoryStore) -> Result<Self> {
+        info!("initializing agent runtime");
         let session_manager = Arc::new(Mutex::new(SessionManager::new()));
 
         let context_manager = Arc::new(ContextManager::new(
@@ -35,10 +37,13 @@ impl AgentRuntime {
             .api_key(&config.provider.language_model.api_key)
             .build()
             .context("failed to build OpenRouter client")?;
+        info!(provider = "openrouter", "language model client initialized");
 
         let memory_store = Arc::new(memory_store);
 
         let provider = Arc::new(OpenRouterAdapter::new(openai_client));
+
+        info!("agent runtime initialized");
 
         Ok(Self {
             session_manager,
@@ -53,6 +58,11 @@ impl AgentRuntime {
         session_key: SessionKey,
         user_input: String,
     ) -> Result<AgentResponse> {
+        info!(
+            session = %session_key.channel_id,
+            input_len = user_input.len(),
+            "submitting user input"
+        );
         let session = {
             let mut session_manager = self
                 .session_manager
@@ -60,8 +70,10 @@ impl AgentRuntime {
                 .expect("session manager mutex poisoned");
             session_manager.get_or_create(&session_key).clone()
         };
+        debug!(turn_count = session.turns.len(), "session loaded");
 
         let context = self.context_manager.build(&session, &user_input).await;
+        debug!(context_turns = context.turns.len(), "context built");
 
         let agent = self
             .provider
@@ -79,10 +91,14 @@ impl AgentRuntime {
         }
         prompt_text.push_str(&format!("User: {}", context.user_message));
 
+        debug!(prompt_len = prompt_text.len(), "prompt composed");
+
         let result = agent.prompt(prompt_text).await?;
+        info!(response_len = result.len(), "received model response");
 
         self.memory_store
             .push_short_term(&session_key, &user_input, result.as_str());
+        debug!("short-term memory updated");
         {
             let mut session_manager = self
                 .session_manager
@@ -90,6 +106,7 @@ impl AgentRuntime {
                 .expect("session manager mutex poisoned");
             session_manager.append(&session_key, &user_input, result.as_str());
         }
+        debug!("session history updated");
 
         Ok(AgentResponse { content: result })
     }

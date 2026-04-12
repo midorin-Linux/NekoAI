@@ -1,6 +1,7 @@
 use anyhow::Result;
 use config::{Config as ConfigBuilder, ConfigError, File};
 use serde::Deserialize;
+use tracing::{debug, info};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Discord {
@@ -36,6 +37,7 @@ pub struct Config {
 
 impl Config {
     pub fn load() -> Result<Self, ConfigError> {
+        info!("loading configuration file");
         let config = ConfigBuilder::builder()
             .add_source(
                 File::with_name(".config/config.json")
@@ -44,6 +46,14 @@ impl Config {
             )
             .build()?;
 
-        config.try_deserialize()
+        debug!("configuration source parsed");
+
+        let parsed = config.try_deserialize();
+
+        if parsed.is_ok() {
+            info!("configuration deserialized successfully");
+        }
+
+        parsed
     }
 }

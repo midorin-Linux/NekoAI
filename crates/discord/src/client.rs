@@ -4,6 +4,7 @@ use agent::runtime::AgentRuntime;
 use anyhow::{Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 use serenity::prelude::*;
+use tracing::info;
 
 use crate::handler::Handler;
 
@@ -17,6 +18,7 @@ impl DiscordClient {
         guild_id: u64,
         agent_runtime: AgentRuntime,
     ) -> Result<Self> {
+        info!(guild_id, "creating discord client");
         let spinner = ProgressBar::new_spinner();
         spinner.set_style(
             ProgressStyle::default_spinner()
@@ -38,6 +40,7 @@ impl DiscordClient {
 
         let command_framework =
             crate::command_router::command_framework(guild_id, agent_runtime.clone()).await;
+        info!("discord command framework initialized");
 
         let discord_client = Client::builder(&discord_token, intents)
             .event_handler(Handler {
@@ -47,14 +50,19 @@ impl DiscordClient {
             .framework(command_framework)
             .await?;
 
+        info!("discord client created");
+
         Ok(Self { discord_client })
     }
 
     pub async fn run(mut self) -> Result<()> {
+        info!("starting discord event loop");
         self.discord_client
             .start()
             .await
             .context("Failed to start Discord client")?;
+
+        info!("discord event loop finished");
 
         Ok(())
     }

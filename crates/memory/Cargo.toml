@@ -12,3 +12,4 @@ domain = { workspace = true }
 rig-core = { workspace = true }
 rig-qdrant = { workspace = true }
 serenity = { workspace = true }
+tracing = { workspace = true }

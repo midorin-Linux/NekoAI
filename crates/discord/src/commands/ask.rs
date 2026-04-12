@@ -1,13 +1,22 @@
 use domain::agent::session::{SessionKey, SessionKind};
 use serenity::all::{Channel, ChannelType};
+use tracing::{debug, error, info};
 
 use crate::command_router::Context;
 
 #[poise::command(prefix_command, slash_command)]
 pub async fn ask(ctx: Context<'_>, #[description = "Prompt"] prompt: String) -> anyhow::Result<()> {
     if ctx.author().bot {
+        debug!(user_id = %ctx.author().id, "ignored bot invocation");
         return Ok(());
     }
+
+    info!(
+        user_id = %ctx.author().id,
+        channel_id = %ctx.channel_id(),
+        prompt_len = prompt.len(),
+        "processing ask command"
+    );
 
     ctx.defer().await?;
 
@@ -45,12 +54,24 @@ pub async fn ask(ctx: Context<'_>, #[description = "Prompt"] prompt: String) -> 
         kind,
     };
 
+    debug!(session = %session_key.channel_id, "session key resolved");
+
     let reply = match ctx.data().agent_runtime.submit(session_key, prompt).await {
-        Ok(response) => response.content,
-        Err(err) => err.to_string(),
+        Ok(response) => {
+            info!(
+                response_len = response.content.len(),
+                "agent response generated"
+            );
+            response.content
+        }
+        Err(err) => {
+            error!(error = %err, "failed to generate agent response");
+            err.to_string()
+        }
     };
 
     let chunks = split_message(&reply);
+    info!(chunk_count = chunks.len(), "sending discord reply chunks");
     for chunk in chunks {
         ctx.say(chunk.to_string()).await?;
     }
@@ -74,7 +95,7 @@ pub fn split_message(text: &str) -> Vec<&str> {
             break;
         }
 
-        let split_at = remaining[.. DISCORD_MAX_LENGTH]
+        let split_at = remaining[..DISCORD_MAX_LENGTH]
             .rfind('\n')
             .map(|pos| pos + 1)
             .unwrap_or(DISCORD_MAX_LENGTH);

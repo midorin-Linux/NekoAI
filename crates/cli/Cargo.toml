@@ -1,11 +1,13 @@
 [package]
 name = "cli"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 
 [dependencies]
 agent = { workspace = true }
 anyhow = { workspace = true }
+colored = { workspace = true }
 config = { workspace = true }
 dialoguer = { workspace = true }
 discord = { workspace = true }
@@ -16,6 +18,5 @@ memory = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 
-colored = "3.1.1"
 clap = { version = "4.6.0", features = ["derive"] }
 clap_derive = "4.6.0"

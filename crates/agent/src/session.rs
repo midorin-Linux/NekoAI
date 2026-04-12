@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use domain::agent::session::SessionKey;
 use rig::completion::Message;
+use tracing::debug;
 
 #[derive(Clone)]
 pub struct ConversationTurn {
@@ -43,6 +44,7 @@ impl SessionManager {
             .iter()
             .position(|session| session.key == *session_key)
         {
+            debug!(session = %session_key.channel_id, "reusing existing session");
             return &mut self.sessions[index];
         }
 
@@ -55,6 +57,8 @@ impl SessionManager {
             last_active: now,
             token_count: 0,
         });
+
+        debug!(session = %session_key.channel_id, "created new session");
 
         self.sessions.last_mut().expect("session was just inserted")
     }
@@ -78,5 +82,12 @@ impl SessionManager {
         }
 
         session.last_active = Utc::now();
+
+        debug!(
+            session = %session_key.channel_id,
+            message_count = session.messages.len(),
+            turn_count = session.turns.len(),
+            "session updated"
+        );
     }
 }

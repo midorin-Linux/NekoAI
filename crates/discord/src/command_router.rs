@@ -14,6 +14,13 @@ async fn on_error(error: poise::FrameworkError<'_, Data, anyhow::Error>) {
         poise::FrameworkError::Command { error, ctx, .. } => {
             tracing::error!("Error in command `{}`: {:?}", ctx.command().name, error);
         }
+        poise::FrameworkError::CommandCheckFailed { error, ctx, .. } => {
+            tracing::warn!(
+                "Command check failed for `{}`: {:?}",
+                ctx.command().name,
+                error
+            );
+        }
         error => {
             if let Err(e) = poise::builtins::on_error(error).await {
                 tracing::error!("Error while handling error: {}", e);
@@ -38,12 +45,22 @@ pub async fn command_framework(
             on_error: |error| Box::pin(on_error(error)),
             pre_command: |ctx| {
                 Box::pin(async move {
-                    tracing::info!("Execute command {:#?}...", ctx.command().qualified_name);
+                    tracing::info!(
+                        user_id = %ctx.author().id,
+                        channel_id = %ctx.channel_id(),
+                        command = %ctx.command().qualified_name,
+                        "executing command"
+                    );
                 })
             },
             post_command: |ctx| {
                 Box::pin(async move {
-                    tracing::info!("Command {:#?} executed.", ctx.command().qualified_name);
+                    tracing::info!(
+                        user_id = %ctx.author().id,
+                        channel_id = %ctx.channel_id(),
+                        command = %ctx.command().qualified_name,
+                        "command executed"
+                    );
                 })
             },
             ..Default::default()
