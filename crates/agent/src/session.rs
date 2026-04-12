@@ -1,3 +1,4 @@
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use domain::agent::session::SessionKey;
 use rig::completion::Message;
@@ -89,5 +90,20 @@ impl SessionManager {
             turn_count = session.turns.len(),
             "session updated"
         );
+    }
+
+    pub fn clear(&mut self, session_key: &SessionKey) -> Result<()> {
+        if let Some(index) = self
+            .sessions
+            .iter()
+            .position(|session| session.key == *session_key)
+        {
+            self.sessions.remove(index);
+            debug!(session = %session_key.channel_id, "session cleared");
+            Ok(())
+        } else {
+            debug!(target_session = %session_key.channel_id, "non-existent session");
+            Err(anyhow::anyhow!("session not found"))
+        }
     }
 }

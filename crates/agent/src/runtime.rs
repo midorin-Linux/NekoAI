@@ -27,14 +27,15 @@ impl AgentRuntime {
         info!("initializing agent runtime");
         let session_manager = Arc::new(Mutex::new(SessionManager::new()));
 
-        let system_instruction =
-            std::fs::read_to_string(".config/INSTRUCTION.md").context("failed to read system instruction")?;
+        let system_instruction = std::fs::read_to_string(".config/INSTRUCTION.md")
+            .context("failed to read system instruction")?;
 
-        let context_manager = Arc::new(ContextManager::new(
-            system_instruction,
-            16384,
-            0.7,
-        ));
+        info!(
+            "system instruction loaded, length = {}",
+            system_instruction.len()
+        );
+
+        let context_manager = Arc::new(ContextManager::new(system_instruction, 16384, 0.7));
 
         let openai_client = rig::providers::openrouter::Client::builder()
             .api_key(&config.provider.language_model.api_key)
@@ -54,6 +55,14 @@ impl AgentRuntime {
             memory_store,
             provider,
         })
+    }
+
+    pub fn clear_session(&self, session_key: &SessionKey) -> Result<()> {
+        let mut session_manager = self
+            .session_manager
+            .lock()
+            .expect("session manager mutex poisoned");
+        session_manager.clear(session_key)
     }
 
     pub async fn submit(

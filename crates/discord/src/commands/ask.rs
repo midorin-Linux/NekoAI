@@ -1,8 +1,7 @@
-use domain::agent::session::{SessionKey, SessionKind};
-use serenity::all::{Channel, ChannelType};
+use domain::agent::session::SessionKey;
 use tracing::{debug, error, info};
 
-use crate::command_router::Context;
+use crate::{command_router::Context, commands::utils::session_resolver};
 
 #[poise::command(prefix_command, slash_command)]
 pub async fn ask(ctx: Context<'_>, #[description = "Prompt"] prompt: String) -> anyhow::Result<()> {
@@ -23,29 +22,7 @@ pub async fn ask(ctx: Context<'_>, #[description = "Prompt"] prompt: String) -> 
     let guild_id = ctx.guild_id();
     let channel_id = ctx.channel_id();
 
-    let (kind, thread_id) = match channel_id.to_channel(&ctx.serenity_context().http).await {
-        Ok(Channel::Guild(guild_channel)) => match guild_channel.kind {
-            ChannelType::PublicThread | ChannelType::PrivateThread | ChannelType::NewsThread => {
-                (SessionKind::Thread, Some(guild_channel.id))
-            }
-            _ => (SessionKind::GuildChannel, None),
-        },
-        Ok(Channel::Private(_)) => (SessionKind::DirectMessage, None),
-        Ok(_) => {
-            if guild_id.is_some() {
-                (SessionKind::GuildChannel, None)
-            } else {
-                (SessionKind::DirectMessage, None)
-            }
-        }
-        Err(_) => {
-            if guild_id.is_some() {
-                (SessionKind::GuildChannel, None)
-            } else {
-                (SessionKind::DirectMessage, None)
-            }
-        }
-    };
+    let (kind, thread_id) = session_resolver(&ctx, channel_id, guild_id).await;
 
     let session_key = SessionKey {
         guild_id,
