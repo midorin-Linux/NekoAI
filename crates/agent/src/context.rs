@@ -9,6 +9,7 @@ pub struct Context {
 pub struct ContextManager {
     base_system_prompt: String,
     max_tokens: usize,
+    #[allow(dead_code)]
     compaction_threshold: f32,
 }
 
