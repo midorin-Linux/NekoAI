@@ -6,6 +6,12 @@ pub struct MemoryStore {
     short_term_memory: ShortTermMemory,
 }
 
+impl Default for MemoryStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MemoryStore {
     pub fn new() -> Self {
         let short_term_memory = ShortTermMemory::new(20);

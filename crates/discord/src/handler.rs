@@ -1,7 +1,5 @@
 use agent::runtime::AgentRuntime;
-use domain::agent::session::{SessionKey, SessionKind};
 use serenity::{
-    all::{Channel, ChannelType},
     async_trait,
     model::{channel::Message, gateway::Ready},
     prelude::*,
@@ -14,7 +12,7 @@ pub struct Handler {
 
 #[async_trait]
 impl EventHandler for Handler {
-    async fn message(&self, ctx: Context, new_message: Message) {
+    async fn message(&self, _ctx: Context, _new_message: Message) {
         // if new_message.author.bot {
         //     return;
         // }

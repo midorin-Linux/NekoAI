@@ -105,9 +105,8 @@ impl StartCommand {
         };
 
         let config = Config::load()
-            .map_err(|e| {
+            .inspect_err(|_e| {
                 spinner.finish_and_clear();
-                e
             })
             .inspect(|_| spinner.finish_and_clear())
             .map_err(|e| {
@@ -130,7 +129,7 @@ impl StartCommand {
 
         info!("Initializing context memory");
 
-        let short_term_memory = ShortTermMemory::new(10);
+        let _short_term_memory = ShortTermMemory::new(10);
         let memory_store = MemoryStore::new();
 
         spinner.finish_and_clear();

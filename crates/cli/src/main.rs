@@ -2,7 +2,6 @@ pub mod commands;
 
 use agent::runtime::AgentRuntime;
 use clap::Command;
-use indicatif::{ProgressBar, ProgressStyle};
 use discord::client::DiscordClient;
 
 fn cli() -> Command {
@@ -28,7 +27,7 @@ async fn main() {
                 }
             };
 
-            if let Err(err) =
+            if let Err(_err) =
                 match AgentRuntime::new(start_command.config.clone(), start_command.memory_store)
                     .await
                 {
