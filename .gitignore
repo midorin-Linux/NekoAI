@@ -3,5 +3,5 @@
 *.pdb
 .idea
 .env
-.config
+.config/config.json
 logs

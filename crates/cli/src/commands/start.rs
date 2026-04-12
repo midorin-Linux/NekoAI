@@ -46,7 +46,7 @@ impl StartCommand {
         );
         spinner.enable_steady_tick(std::time::Duration::from_millis(120));
 
-        let guard = match init_tracing("info".to_string()) {
+        let guard = match init_tracing() {
             Ok(guard) => guard,
             Err(e) => {
                 spinner.finish_and_clear();

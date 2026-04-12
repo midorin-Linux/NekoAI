@@ -6,7 +6,7 @@ use tracing_appender::non_blocking;
 pub use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
 
-pub fn init_tracing(log_level: String) -> Result<WorkerGuard> {
+pub fn init_tracing() -> Result<WorkerGuard> {
     if let Ok(false) = std::fs::exists("logs") {
         std::fs::create_dir("logs").context("Failed to create logs directory")?;
     }
@@ -16,7 +16,9 @@ pub fn init_tracing(log_level: String) -> Result<WorkerGuard> {
         File::create(format!("logs/nekoai-{}.log", date)).context("Failed to create log file")?;
     let (non_blocking, guard) = non_blocking(file);
 
-    let env_filter = EnvFilter::new(log_level);
+    dotenvy::dotenv().ok();
+
+    let env_filter = EnvFilter::new(std::env::var("LOG_LEVEL").unwrap_or_else(|_| "info".into()));
 
     tracing_subscriber::fmt()
         .with_writer(non_blocking)
