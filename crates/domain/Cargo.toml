@@ -1,5 +1,5 @@
 [package]
-name = "domain"
+name = "nekoai-domain"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

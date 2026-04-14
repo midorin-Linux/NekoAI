@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use domain::agent::session::SessionKey;
+use nekoai_domain::agent::session::SessionKey;
 use rig::completion::Message;
 use tracing::debug;
 

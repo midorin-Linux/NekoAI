@@ -1,15 +1,15 @@
 [package]
-name = "discord"
+name = "nekoai-discord"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
-agent = { workspace = true }
+nekoai-agent = { workspace = true }
 anyhow = { workspace = true }
 colored = { workspace = true }
 dialoguer = { workspace = true }
-domain = { workspace = true }
+nekoai-domain = { workspace = true }
 indicatif = { workspace = true }
 serenity = { workspace = true }
 tracing = { workspace = true }

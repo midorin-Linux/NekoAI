@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use agent::runtime::AgentRuntime;
 use anyhow::{Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
+use nekoai_agent::runtime::AgentRuntime;
 use serenity::prelude::*;
 use tracing::info;
 

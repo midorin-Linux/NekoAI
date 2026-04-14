@@ -1,8 +1,8 @@
 pub mod commands;
 
-use agent::runtime::AgentRuntime;
 use clap::Command;
-use discord::client::DiscordClient;
+use nekoai_agent::runtime::AgentRuntime;
+use nekoai_discord::client::DiscordClient;
 use tracing::{error, info, warn};
 
 fn cli() -> Command {

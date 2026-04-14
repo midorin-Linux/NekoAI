@@ -1,4 +1,4 @@
-use agent::runtime::AgentRuntime;
+use nekoai_agent::runtime::AgentRuntime;
 
 use crate::commands::{ask, clear};
 

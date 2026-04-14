@@ -1,4 +1,4 @@
-use domain::agent::session::SessionKey;
+use nekoai_domain::agent::session::SessionKey;
 use tracing::{debug, error, info};
 
 use crate::{command_router::Context, commands::utils::session_resolver};

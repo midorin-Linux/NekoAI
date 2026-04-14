@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use chrono::Utc;
 use dashmap::DashMap;
-use domain::agent::session::SessionKey;
+use nekoai_domain::agent::session::SessionKey;
 use tracing::debug;
 
 #[derive(Debug, Clone)]

@@ -1,4 +1,4 @@
-use domain::agent::session::SessionKind;
+use nekoai_domain::agent::session::SessionKind;
 use serenity::all::{Channel, ChannelId, ChannelType, GuildId};
 
 use crate::command_router::Context;

@@ -5,9 +5,9 @@ help:
     just -l
 
 neko *args:
-    cargo build --bin cli
+    cargo build --bin nekoai-cli
     @echo ""
-    ./target/debug/cli.exe {{args}}
+    ./target/debug/nekoai-cli.exe {{args}}
     @echo ""
 
 

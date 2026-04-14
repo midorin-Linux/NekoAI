@@ -18,15 +18,15 @@ edition = "2024"
 license = "Apache-2.0"
 
 [workspace.dependencies]
-agent = { path = "crates/agent" }
-cli = { path = "crates/cli" }
-config = { path = "crates/config" }
-discord = { path = "crates/discord" }
-domain = { path = "crates/domain" }
-infra = { path = "crates/infra" }
-memory = { path = "crates/memory" }
+nekoai-agent = { path = "crates/agent" }
+nekoai-cli = { path = "crates/cli" }
+nekoai-config = { path = "crates/config" }
+nekoai-discord = { path = "crates/discord" }
+nekoai-domain = { path = "crates/domain" }
+nekoai-infra = { path = "crates/infra" }
+nekoai-memory = { path = "crates/memory" }
 #setup = { path = "crates/setup" }
-tools = { path = "crates/tools" }
+nekoai-tools = { path = "crates/tools" }
 
 anyhow = "1.0.102"
 colored = "3.1.1"

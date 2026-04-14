@@ -1,4 +1,4 @@
-use domain::agent::session::SessionKey;
+use nekoai_domain::agent::session::SessionKey;
 use tracing::{debug, error, info};
 
 use crate::{command_router::Context, commands::utils::session_resolver};
@@ -83,7 +83,7 @@ pub fn split_message(text: &str) -> Vec<&str> {
             break;
         }
 
-        let split_at = remaining[.. DISCORD_MAX_LENGTH]
+        let split_at = remaining[..DISCORD_MAX_LENGTH]
             .rfind('\n')
             .map(|pos| pos + 1)
             .unwrap_or(DISCORD_MAX_LENGTH);

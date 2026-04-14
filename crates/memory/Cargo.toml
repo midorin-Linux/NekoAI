@@ -1,5 +1,5 @@
 [package]
-name = "memory"
+name = "nekoai-memory"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,7 +8,7 @@ license.workspace = true
 anyhow = { workspace = true }
 chrono = { workspace = true }
 dashmap = { workspace = true }
-domain = { workspace = true }
+nekoai-domain = { workspace = true }
 rig-core = { workspace = true }
 rig-qdrant = { workspace = true }
 serenity = { workspace = true }

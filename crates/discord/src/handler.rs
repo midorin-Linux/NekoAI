@@ -1,5 +1,5 @@
-use agent::runtime::AgentRuntime;
 use colored::Colorize;
+use nekoai_agent::runtime::AgentRuntime;
 use serenity::{
     async_trait,
     model::{channel::Message, gateway::Ready},

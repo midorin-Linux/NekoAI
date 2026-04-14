@@ -1,10 +1,10 @@
 use anyhow::Result;
 use colored::Colorize;
-use config::loader::Config;
 use dialoguer::{Input, theme::SimpleTheme};
 use indicatif::{ProgressBar, ProgressStyle};
-use infra::logging::{WorkerGuard, init_tracing};
-use memory::{short_term::ShortTermMemory, store::MemoryStore};
+use nekoai_config::loader::Config;
+use nekoai_infra::logging::{WorkerGuard, init_tracing};
+use nekoai_memory::{short_term::ShortTermMemory, store::MemoryStore};
 use tokio::time::sleep;
 use tracing::{error, info, warn};
 

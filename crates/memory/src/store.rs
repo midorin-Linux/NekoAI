@@ -1,4 +1,4 @@
-use domain::agent::session::SessionKey;
+use nekoai_domain::agent::session::SessionKey;
 use tracing::{debug, info};
 
 use crate::short_term::ShortTermMemory;

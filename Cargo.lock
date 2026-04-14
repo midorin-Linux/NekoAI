@@ -9,22 +9,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
-name = "agent"
-version = "1.0.0"
-dependencies = [
- "anyhow",
- "chrono",
- "config 1.0.0",
- "dashmap 7.0.0-rc2",
- "domain",
- "memory",
- "rig-core",
- "serde",
- "serenity",
- "tracing",
-]
-
-[[package]]
 name = "aho-corasick"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -247,9 +231,9 @@ checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
 name = "bitflags"
-version = "2.11.0"
+version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "843867be96c8daad0d758b57df9392b6d8d271134fce549de6ce169ff98a92af"
+checksum = "c4512299f36f043ab09a583e57bceb5a5aab7a73db1805848e8fef3c9e8c78b3"
 dependencies = [
  "serde_core",
 ]
@@ -403,25 +387,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
-name = "cli"
-version = "1.0.0"
-dependencies = [
- "agent",
- "anyhow",
- "clap",
- "clap_derive",
- "colored",
- "config 1.0.0",
- "dialoguer",
- "discord",
- "indicatif",
- "infra",
- "memory",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "cmake"
 version = "0.1.58"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -484,16 +449,6 @@ dependencies = [
  "toml",
  "winnow 1.0.1",
  "yaml-rust2",
-]
-
-[[package]]
-name = "config"
-version = "1.0.0"
-dependencies = [
- "anyhow",
- "config 0.15.22",
- "serde",
- "tracing",
 ]
 
 [[package]]
@@ -849,21 +804,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "discord"
-version = "1.0.0"
-dependencies = [
- "agent",
- "anyhow",
- "colored",
- "dialoguer",
- "domain",
- "indicatif",
- "poise",
- "serenity",
- "tracing",
-]
-
-[[package]]
 name = "displaydoc"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -881,14 +821,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "442039f5147480ba31067cb00ada1adae6892028e40e45fc5de7b7df6dcc1b5f"
 dependencies = [
  "const-random",
-]
-
-[[package]]
-name = "domain"
-version = "1.0.0"
-dependencies = [
- "rig-core",
- "serenity",
 ]
 
 [[package]]
@@ -1584,18 +1516,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "infra"
-version = "1.0.0"
-dependencies = [
- "anyhow",
- "chrono",
- "dotenvy",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "ipnet"
 version = "2.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1788,20 +1708,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
-name = "memory"
-version = "1.0.0"
-dependencies = [
- "anyhow",
- "chrono",
- "dashmap 7.0.0-rc2",
- "domain",
- "rig-core",
- "rig-qdrant",
- "serenity",
- "tracing",
-]
-
-[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1867,6 +1773,103 @@ checksum = "3ffa00dec017b5b1a8b7cf5e2c008bfda1aa7e0697ac1508b491fdf2622fb4d8"
 dependencies = [
  "rand 0.8.5",
 ]
+
+[[package]]
+name = "nekoai-agent"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "nekoai-config",
+ "nekoai-domain",
+ "nekoai-memory",
+ "rig-core",
+ "serde",
+ "serenity",
+ "tracing",
+]
+
+[[package]]
+name = "nekoai-cli"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "clap_derive",
+ "colored",
+ "dialoguer",
+ "indicatif",
+ "nekoai-agent",
+ "nekoai-config",
+ "nekoai-discord",
+ "nekoai-infra",
+ "nekoai-memory",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "nekoai-config"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "config",
+ "serde",
+ "tracing",
+]
+
+[[package]]
+name = "nekoai-discord"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "colored",
+ "dialoguer",
+ "indicatif",
+ "nekoai-agent",
+ "nekoai-domain",
+ "poise",
+ "serenity",
+ "tracing",
+]
+
+[[package]]
+name = "nekoai-domain"
+version = "1.0.0"
+dependencies = [
+ "rig-core",
+ "serenity",
+]
+
+[[package]]
+name = "nekoai-infra"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "dotenvy",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "nekoai-memory"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "dashmap 7.0.0-rc2",
+ "nekoai-domain",
+ "rig-core",
+ "rig-qdrant",
+ "serenity",
+ "tracing",
+]
+
+[[package]]
+name = "nekoai-tools"
+version = "1.0.0"
 
 [[package]]
 name = "nom"
@@ -2627,7 +2630,7 @@ dependencies = [
  "once_cell",
  "ring",
  "rustls-pki-types",
- "rustls-webpki 0.103.11",
+ "rustls-webpki 0.103.12",
  "subtle",
  "zeroize",
 ]
@@ -2677,7 +2680,7 @@ dependencies = [
  "rustls 0.23.38",
  "rustls-native-certs",
  "rustls-platform-verifier-android",
- "rustls-webpki 0.103.11",
+ "rustls-webpki 0.103.12",
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
@@ -2703,9 +2706,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.11"
+version = "0.103.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20a6af516fea4b20eccceaf166e8aa666ac996208e8a644ce3ef5aa783bc7cd4"
+checksum = "8279bb85272c9f10811ae6a6c547ff594d6a7f3c6c6b02ee9726d1d0dcfcdd06"
 dependencies = [
  "aws-lc-rs",
  "ring",
@@ -3525,10 +3528,6 @@ dependencies = [
  "tower-service",
  "tracing",
 ]
-
-[[package]]
-name = "tools"
-version = "1.0.0"
 
 [[package]]
 name = "tower"

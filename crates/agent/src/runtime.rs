@@ -1,9 +1,9 @@
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
-use config::loader::Config;
-use domain::agent::session::SessionKey;
-use memory::store::MemoryStore;
+use nekoai_config::loader::Config;
+use nekoai_domain::agent::session::SessionKey;
+use nekoai_memory::store::MemoryStore;
 use rig::completion::Prompt;
 use tracing::{debug, info};
 
