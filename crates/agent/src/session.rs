@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use domain::agent::session::SessionKey;
@@ -13,8 +15,8 @@ pub struct ConversationTurn {
 #[derive(Clone)]
 pub struct Session {
     pub key: SessionKey,
-    pub messages: Vec<Message>,
-    pub turns: Vec<ConversationTurn>,
+    pub messages: VecDeque<Message>,
+    pub turns: VecDeque<ConversationTurn>,
     pub created_at: DateTime<Utc>,
     pub last_active: DateTime<Utc>,
     pub token_count: usize,
@@ -42,19 +44,19 @@ impl SessionManager {
     pub fn append(&mut self, session_key: &SessionKey, user: &str, assistant: &str) {
         let max_messages = self.max_messages;
         let session = self.get_or_create(session_key);
-        session.turns.push(ConversationTurn {
+        session.turns.push_back(ConversationTurn {
             user: user.to_string(),
             assistant: assistant.to_string(),
         });
-        session.messages.push(Message::user(user));
-        session.messages.push(Message::assistant(assistant));
+        session.messages.push_back(Message::user(user));
+        session.messages.push_back(Message::assistant(assistant));
 
         while session.messages.len() > max_messages {
-            session.messages.remove(0);
+            session.messages.pop_front();
         }
 
         while session.turns.len() * 2 > max_messages {
-            session.turns.remove(0);
+            session.turns.pop_front();
         }
 
         session.last_active = Utc::now();
@@ -94,8 +96,8 @@ impl SessionManager {
         let now = Utc::now();
         self.sessions.push(Session {
             key: session_key.clone(),
-            messages: Vec::new(),
-            turns: Vec::new(),
+            messages: VecDeque::new(),
+            turns: VecDeque::new(),
             created_at: now,
             last_active: now,
             token_count: 0,

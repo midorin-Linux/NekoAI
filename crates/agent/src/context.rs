@@ -1,10 +1,12 @@
+use std::collections::VecDeque;
+
 use tracing::debug;
 
 use crate::session::{ConversationTurn, Session};
 
 pub struct Context {
     pub system_prompt: String,
-    pub turns: Vec<ConversationTurn>,
+    pub turns: VecDeque<ConversationTurn>,
     pub user_message: String,
 }
 
@@ -36,7 +38,9 @@ impl ContextManager {
         let max_turns = (self.max_tokens / 512).max(1);
         if turns.len() > max_turns {
             let drain_count = turns.len() - max_turns;
-            turns.drain(0 .. drain_count);
+            for _ in 0..drain_count {
+                turns.pop_front();
+            }
             debug!(
                 drained_turns = drain_count,
                 "compacted conversation turns for context"

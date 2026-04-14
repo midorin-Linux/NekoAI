@@ -9,7 +9,7 @@ use tracing::{debug, info};
 
 use crate::{
     context::ContextManager,
-    provider::OpenRouterAdapter,
+    provider::OpenAICompatibleAdapter,
     session::{Session, SessionManager},
 };
 
@@ -22,7 +22,7 @@ pub struct AgentRuntime {
     session_manager: Arc<Mutex<SessionManager>>,
     context_manager: Arc<ContextManager>,
     memory_store: Arc<MemoryStore>,
-    provider: Arc<OpenRouterAdapter>,
+    provider: Arc<OpenAICompatibleAdapter>,
     // tool_registry: Arc<ToolRegistry>,
     agent_model_name: String,
 }
@@ -43,15 +43,16 @@ impl AgentRuntime {
 
         let context_manager = Arc::new(ContextManager::new(system_instruction, 16384, 0.7));
 
-        let openai_client = rig::providers::openrouter::Client::builder()
-            .api_key(&config.provider.language_model.api_key)
-            .build()
-            .context("failed to build OpenRouter client")?;
-        info!(provider = "openrouter", "language model client initialized");
-
         let memory_store = Arc::new(memory_store);
 
-        let provider = Arc::new(OpenRouterAdapter::new(openai_client));
+        let openai_client = rig::providers::openai::Client::builder()
+            .api_key(&config.provider.language_model.api_key)
+            .base_url(&config.provider.language_model.provider_base_url)
+            .build()
+            .context("failed to build OpenRouter client")?;
+        let provider = Arc::new(OpenAICompatibleAdapter::new(openai_client));
+
+        info!(provider = provider.provider_name(), "language model client initialized");
 
         let agent_model_name = config.provider.language_model.model_name;
 
