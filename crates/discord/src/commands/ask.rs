@@ -33,13 +33,24 @@ pub async fn ask(ctx: Context<'_>, #[description = "Prompt"] prompt: String) -> 
 
     debug!(session = %session_key.channel_id, "session key resolved");
 
-    let reply = match ctx.data().agent_runtime.submit(session_key, prompt.clone()).await {
+    let reply = match ctx
+        .data()
+        .agent_runtime
+        .submit(session_key, prompt.clone())
+        .await
+    {
         Ok(response) => {
             info!(
                 response_len = response.content.len(),
                 "agent response generated"
             );
-            format!("{}: {}\n\n{}: {}", ctx.author().name, prompt, "Assistant", response.content)
+            format!(
+                "{}: {}\n\n{}: {}",
+                ctx.author().name,
+                prompt,
+                "Assistant",
+                response.content
+            )
         }
         Err(err) => {
             error!(error = %err, "failed to generate agent response");
