@@ -14,4 +14,4 @@ indicatif = { workspace = true }
 serenity = { workspace = true }
 tracing = { workspace = true }
 
-poise = "0.6.1"
+poise = "0.6.2"

@@ -12,7 +12,6 @@ dashmap = { workspace = true }
 domain = { workspace = true }
 memory = { workspace = true }
 rig-core = { workspace = true }
+serde = { workspace = true }
 serenity = { workspace = true }
 tracing = { workspace = true }
-
-serde = { version = "1.0.228", features = ["derive"] }
