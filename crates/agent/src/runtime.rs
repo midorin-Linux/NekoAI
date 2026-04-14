@@ -107,7 +107,6 @@ impl AgentRuntime {
         let agent = self
             .provider
             .build_agent(self.agent_model_name.as_str())
-            .preamble("You are helpful assistant.")
             .build();
 
         let mut prompt_text = String::new();
