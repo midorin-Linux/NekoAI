@@ -49,10 +49,14 @@ impl AgentRuntime {
             .api_key(&config.provider.language_model.api_key)
             .base_url(&config.provider.language_model.provider_base_url)
             .build()
-            .context("failed to build OpenAI compatible client")?;
+            .context("failed to build OpenAI compatible responses client")?
+            .completions_api();
         let provider = Arc::new(OpenAICompatibleAdapter::new(openai_client));
 
-        info!(provider = provider.provider_name(), "language model client initialized");
+        info!(
+            provider = provider.provider_name(),
+            "language model client initialized"
+        );
 
         let agent_model_name = config.provider.language_model.model_name;
 

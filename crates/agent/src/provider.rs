@@ -1,18 +1,19 @@
 use rig::{
-    agent::AgentBuilder, client::CompletionClient,
-    providers::openai::responses_api::ResponsesCompletionModel,
+    agent::AgentBuilder,
+    client::CompletionClient,
+    providers::openai::{self, completion::CompletionModel},
 };
 
 pub struct OpenAICompatibleAdapter {
-    client: rig::providers::openai::Client,
+    client: openai::CompletionsClient,
 }
 
 impl OpenAICompatibleAdapter {
-    pub fn new(client: rig::providers::openai::Client) -> Self {
+    pub fn new(client: openai::CompletionsClient) -> Self {
         Self { client }
     }
 
-    pub fn build_agent(&self, model: &str) -> AgentBuilder<ResponsesCompletionModel> {
+    pub fn build_agent(&self, model: &str) -> AgentBuilder<CompletionModel> {
         self.client.agent(model)
     }
 
