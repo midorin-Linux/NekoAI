@@ -7,7 +7,11 @@ use memory::store::MemoryStore;
 use rig::completion::Prompt;
 use tracing::{debug, info};
 
-use crate::{context::ContextManager, provider::OpenRouterAdapter, session::SessionManager};
+use crate::{
+    context::ContextManager,
+    provider::OpenRouterAdapter,
+    session::{Session, SessionManager},
+};
 
 pub struct AgentResponse {
     pub content: String,
@@ -63,6 +67,14 @@ impl AgentRuntime {
             .lock()
             .expect("session manager mutex poisoned");
         session_manager.clear(session_key)
+    }
+
+    pub fn get_history(&self, session_key: &SessionKey) -> Result<Session> {
+        let mut session_manager = self
+            .session_manager
+            .lock()
+            .expect("session manager mutex poisoned");
+        session_manager.get(session_key).map(|s| s.clone())
     }
 
     pub async fn submit(

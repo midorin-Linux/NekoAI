@@ -39,31 +39,6 @@ impl SessionManager {
         }
     }
 
-    pub fn get_or_create(&mut self, session_key: &SessionKey) -> &mut Session {
-        if let Some(index) = self
-            .sessions
-            .iter()
-            .position(|session| session.key == *session_key)
-        {
-            debug!(session = %session_key.channel_id, "reusing existing session");
-            return &mut self.sessions[index];
-        }
-
-        let now = Utc::now();
-        self.sessions.push(Session {
-            key: session_key.clone(),
-            messages: Vec::new(),
-            turns: Vec::new(),
-            created_at: now,
-            last_active: now,
-            token_count: 0,
-        });
-
-        debug!(session = %session_key.channel_id, "created new session");
-
-        self.sessions.last_mut().expect("session was just inserted")
-    }
-
     pub fn append(&mut self, session_key: &SessionKey, user: &str, assistant: &str) {
         let max_messages = self.max_messages;
         let session = self.get_or_create(session_key);
@@ -105,5 +80,43 @@ impl SessionManager {
             debug!(target_session = %session_key.channel_id, "non-existent session");
             Err(anyhow::anyhow!("session not found"))
         }
+    }
+
+    pub fn get_or_create(&mut self, session_key: &SessionKey) -> &mut Session {
+        if let Some(index) = self
+            .sessions
+            .iter()
+            .position(|session| session.key == *session_key)
+        {
+            return &mut self.sessions[index];
+        }
+
+        let now = Utc::now();
+        self.sessions.push(Session {
+            key: session_key.clone(),
+            messages: Vec::new(),
+            turns: Vec::new(),
+            created_at: now,
+            last_active: now,
+            token_count: 0,
+        });
+
+        debug!(session = %session_key.channel_id, "created new session");
+
+        self.sessions.last_mut().expect("session was just inserted")
+    }
+
+    pub fn get(&mut self, session_key: &SessionKey) -> Result<&mut Session> {
+        self.sessions
+            .iter()
+            .position(|session| session.key == *session_key)
+            .map(|index| {
+                debug!(session = %session_key.channel_id, "found existing session");
+                &mut self.sessions[index]
+            })
+            .ok_or_else(|| {
+                debug!(target_session = %session_key.channel_id, "non-existent session");
+                anyhow::anyhow!("session not found")
+            })
     }
 }
