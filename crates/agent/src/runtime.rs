@@ -24,6 +24,7 @@ pub struct AgentRuntime {
     memory_store: Arc<MemoryStore>,
     provider: Arc<OpenRouterAdapter>,
     // tool_registry: Arc<ToolRegistry>,
+    agent_model_name: String,
 }
 
 impl AgentRuntime {
@@ -52,6 +53,8 @@ impl AgentRuntime {
 
         let provider = Arc::new(OpenRouterAdapter::new(openai_client));
 
+        let agent_model_name = config.provider.language_model.model_name;
+
         info!("agent runtime initialized");
 
         Ok(Self {
@@ -59,6 +62,7 @@ impl AgentRuntime {
             context_manager,
             memory_store,
             provider,
+            agent_model_name,
         })
     }
 
@@ -102,7 +106,7 @@ impl AgentRuntime {
 
         let agent = self
             .provider
-            .build_agent("nvidia/nemotron-3-super-120b-a12b:free")
+            .build_agent(self.agent_model_name.as_str())
             .preamble("You are helpful assistant.")
             .build();
 
