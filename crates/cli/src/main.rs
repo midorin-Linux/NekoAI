@@ -1,8 +1,10 @@
+mod chat;
 pub mod commands;
 
 use clap::Command;
-use nekoai_agent::runtime::AgentRuntime;
-use nekoai_discord::client::DiscordClient;
+use colored::Colorize;
+use indicatif::{ProgressBar, ProgressStyle};
+use nekoai_agent::runtime::{AgentRuntime, RuntimeInitProgress};
 use tracing::{error, info, warn};
 
 fn cli() -> Command {
@@ -31,36 +33,61 @@ async fn main() {
 
             info!("start command initialized");
 
-            let runtime =
-                match AgentRuntime::new(start_command.config.clone(), start_command.memory_store)
-                    .await
-                {
-                    Ok(runtime) => runtime,
+            let agent_init_bar = ProgressBar::new(RuntimeInitProgress::TOTAL_STEPS);
+            let agent_init_style = match ProgressStyle::with_template(
+                "    [{bar:32.cyan/blue}] {pos:>2}/{len:2} {msg}",
+            ) {
+                Ok(style) => style.progress_chars("=>-"),
+                Err(_) => ProgressStyle::default_bar(),
+            };
+            agent_init_bar.set_style(agent_init_style);
+            agent_init_bar.set_message("initializing agent runtime");
+
+            let runtime = match AgentRuntime::new_with_progress(
+                start_command.config.clone(),
+                start_command.memory_store,
+                |progress| {
+                    agent_init_bar.set_position(progress.completed_steps);
+                    agent_init_bar.set_length(progress.total_steps);
+                    agent_init_bar.set_message(progress.message);
+                },
+            )
+            .await
+            {
+                Ok(runtime) => runtime,
+                Err(err) => {
+                    agent_init_bar.finish_and_clear();
+                    error!(error = %err, "failed to initialize agent runtime");
+                    println!(
+                        "    {} Failed to initialize agent runtime: {}",
+                        "✗".red(),
+                        err
+                    );
+                    std::process::exit(1);
+                }
+            };
+
+            agent_init_bar.finish_and_clear();
+            println!("    {} Agent runtime initialized", "✓".green());
+
+            info!("agent runtime initialized");
+
+            let chat_client =
+                match chat::ChatClient::initialize(&start_command.config, runtime).await {
+                    Ok(client) => client,
                     Err(err) => {
-                        error!(error = %err, "failed to initialize agent runtime");
+                        error!(error = %err, "failed to initialize chat client");
                         eprintln!("Error: {:#}", err);
                         std::process::exit(1);
                     }
                 };
 
-            info!("agent runtime initialized");
+            info!(
+                platform = chat_client.platform_name(),
+                "chat client initialized"
+            );
 
-            let discord_client = match DiscordClient::new(
-                start_command.config.discord.token,
-                1233632516750184489,
-                runtime,
-            )
-            .await
-            {
-                Ok(client) => client,
-                Err(err) => {
-                    error!(error = %err, "failed to create discord client");
-                    eprintln!("Error: {:#}", err);
-                    std::process::exit(1);
-                }
-            };
-
-            if let Err(err) = discord_client.run().await {
+            if let Err(err) = chat_client.run().await {
                 error!(error = %err, "application terminated with error");
                 eprintln!("Error: {:#}", err);
                 std::process::exit(1);

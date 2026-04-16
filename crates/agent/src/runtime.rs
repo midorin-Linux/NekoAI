@@ -13,6 +13,25 @@ use crate::{
     session::{Session, SessionManager},
 };
 
+#[derive(Debug, Clone, Copy)]
+pub struct RuntimeInitProgress {
+    pub completed_steps: u64,
+    pub total_steps: u64,
+    pub message: &'static str,
+}
+
+impl RuntimeInitProgress {
+    pub const TOTAL_STEPS: u64 = 5;
+
+    fn new(completed_steps: u64, message: &'static str) -> Self {
+        Self {
+            completed_steps,
+            total_steps: Self::TOTAL_STEPS,
+            message,
+        }
+    }
+}
+
 pub struct AgentResponse {
     pub content: String,
 }
@@ -29,12 +48,25 @@ pub struct AgentRuntime {
 
 impl AgentRuntime {
     pub async fn new(config: Config, memory_store: MemoryStore) -> Result<Self> {
+        Self::new_with_progress(config, memory_store, |_| {}).await
+    }
+
+    pub async fn new_with_progress<F>(
+        config: Config,
+        memory_store: MemoryStore,
+        mut on_progress: F,
+    ) -> Result<Self>
+    where
+        F: FnMut(RuntimeInitProgress),
+    {
         info!("initializing agent runtime");
         let session_manager = Arc::new(Mutex::new(SessionManager::new()));
+        on_progress(RuntimeInitProgress::new(1, "session manager ready"));
 
         let system_instruction_path = std::path::Path::new(".config").join("INSTRUCTION.md");
         let system_instruction = std::fs::read_to_string(system_instruction_path)
             .context("failed to read system instruction")?;
+        on_progress(RuntimeInitProgress::new(2, "system instruction loaded"));
 
         info!(
             "system instruction loaded, length = {}",
@@ -44,6 +76,10 @@ impl AgentRuntime {
         let context_manager = Arc::new(ContextManager::new(system_instruction, 16384, 0.7));
 
         let memory_store = Arc::new(memory_store);
+        on_progress(RuntimeInitProgress::new(
+            3,
+            "context manager and memory store ready",
+        ));
 
         let openai_client = rig::providers::openai::Client::builder()
             .api_key(&config.provider.language_model.api_key)
@@ -52,6 +88,10 @@ impl AgentRuntime {
             .context("failed to build OpenAI compatible responses client")?
             .completions_api();
         let provider = Arc::new(OpenAICompatibleAdapter::new(openai_client));
+        on_progress(RuntimeInitProgress::new(
+            4,
+            "language model provider initialized",
+        ));
 
         info!(
             provider = provider.provider_name(),
@@ -61,6 +101,7 @@ impl AgentRuntime {
         let agent_model_name = config.provider.language_model.model_name;
 
         info!("agent runtime initialized");
+        on_progress(RuntimeInitProgress::new(5, "agent runtime initialized"));
 
         Ok(Self {
             session_manager,

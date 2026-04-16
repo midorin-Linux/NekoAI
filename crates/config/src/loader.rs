@@ -9,6 +9,14 @@ pub struct Discord {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[derive(Default)]
+pub enum ChatPlatform {
+    #[default]
+    Discord,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct LanguageModel {
     pub provider_base_url: String,
     pub api_key: String,
@@ -31,6 +39,8 @@ pub struct Provider {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
+    #[serde(default)]
+    pub chat_platform: ChatPlatform,
     pub discord: Discord,
     pub provider: Provider,
 }
