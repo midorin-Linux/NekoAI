@@ -17,7 +17,13 @@ pub async fn ask(ctx: Context<'_>, #[description = "Prompt"] prompt: String) -> 
         "processing ask command"
     );
 
-    ctx.defer().await?;
+    let _typing = match &ctx {
+        Context::Application(ctx) => {
+            ctx.defer().await?;
+            None
+        }
+        Context::Prefix(ctx) => Some(ctx.channel_id().start_typing(&ctx.serenity_context().http)),
+    };
 
     let guild_id = ctx.guild_id();
     let channel_id = ctx.channel_id();
@@ -45,10 +51,12 @@ pub async fn ask(ctx: Context<'_>, #[description = "Prompt"] prompt: String) -> 
                 "agent response generated"
             );
             format!(
-                "{}: {}\n\n{}: {}",
-                ctx.author().name,
+                "**{}**:\n\n{}\n\n**Assistant**:\n\n{}\n",
+                ctx.author()
+                    .global_name
+                    .clone()
+                    .unwrap_or_else(|| ctx.author().name.clone()),
                 prompt,
-                "Assistant",
                 response.content
             )
         }
@@ -61,7 +69,16 @@ pub async fn ask(ctx: Context<'_>, #[description = "Prompt"] prompt: String) -> 
     let chunks = split_message(&reply);
     info!(chunk_count = chunks.len(), "sending discord reply chunks");
     for chunk in chunks {
-        ctx.say(chunk.to_string()).await?;
+        match ctx {
+            Context::Application(ctx) => {
+                ctx.say(chunk).await?;
+            }
+            Context::Prefix(ctx) => {
+                ctx.channel_id()
+                    .say(&ctx.serenity_context().http, chunk)
+                    .await?;
+            }
+        }
     }
 
     Ok(())
