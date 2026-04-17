@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use chrono::{DateTime, Utc};
+use nekoai_config::loader::Config as AppConfig;
 use nekoai_domain::agent::session::SessionKey;
 use serde_json::Value;
 use tracing::{debug, info};
@@ -11,7 +12,6 @@ use crate::{
     mid_term::MidTermMemory,
     short_term::{ShortTermEntry, ShortTermMemory},
 };
-use nekoai_config::loader::Config as AppConfig;
 
 pub struct MemoryStore {
     short_term_memory: ShortTermMemory,
@@ -41,12 +41,13 @@ impl MemoryStore {
         let short_term_memory = ShortTermMemory::new(config.memory.short_term_max_entries);
         let vector_db = Arc::new(crate::vector_db::qdrant::QdrantClient::new(
             config.memory.vector_db.url.clone(),
-            config
-                .memory
-                .vector_db
-                .api_key
-                .as_ref()
-                .and_then(|value| if value.is_empty() { None } else { Some(value.clone()) }),
+            config.memory.vector_db.api_key.as_ref().and_then(|value| {
+                if value.is_empty() {
+                    None
+                } else {
+                    Some(value.clone())
+                }
+            }),
         ));
         let embedder = Arc::new(crate::embedding::MockEmbedder::new(
             config.provider.embedding_model.dimension as usize,

@@ -1,10 +1,6 @@
 use colored::Colorize;
 use nekoai_agent::runtime::AgentRuntime;
-use serenity::{
-    async_trait,
-    model::{channel::Message, gateway::Ready},
-    prelude::*,
-};
+use serenity::{async_trait, model::gateway::Ready, prelude::*};
 use tracing::info;
 
 pub struct Handler {

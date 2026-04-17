@@ -62,7 +62,7 @@ impl VectorDbClient for InMemoryVectorDb {
             .filter(|p| {
                 req.filter
                     .as_ref()
-                    .map_or(true, |filter| matches_filter(&p.payload, filter))
+                    .is_none_or(|filter| matches_filter(&p.payload, filter))
             })
             .map(|p| {
                 let score = cosine_similarity(&req.vector, &p.vector);
@@ -145,16 +145,16 @@ fn matches_condition(
                 return false;
             };
 
-            if let Some(upper) = lt {
-                if actual >= *upper {
-                    return false;
-                }
+            if let Some(upper) = lt
+                && actual >= *upper
+            {
+                return false;
             }
 
-            if let Some(lower) = gt {
-                if actual <= *lower {
-                    return false;
-                }
+            if let Some(lower) = gt
+                && actual <= *lower
+            {
+                return false;
             }
 
             true
