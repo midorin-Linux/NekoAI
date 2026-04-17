@@ -6,6 +6,7 @@ use tracing::{debug, info};
 #[derive(Debug, Clone, Deserialize)]
 pub struct Discord {
     pub token: String,
+    pub guild_id: u64,
 }
 
 #[derive(Debug, Clone, Deserialize)]

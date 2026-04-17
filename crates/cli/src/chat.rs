@@ -4,8 +4,6 @@ use nekoai_config::loader::{ChatPlatform, Config};
 use nekoai_discord::client::DiscordClient;
 use tracing::info;
 
-const DISCORD_GUILD_ID: u64 = 1233632516750184489;
-
 pub enum ChatClient {
     Discord(DiscordClient),
 }
@@ -16,7 +14,7 @@ impl ChatClient {
             ChatPlatform::Discord => {
                 info!("initializing discord chat client");
                 let client =
-                    DiscordClient::new(config.discord.token.clone(), DISCORD_GUILD_ID, runtime)
+                    DiscordClient::new(config.discord.token.clone(), config.discord.guild_id, runtime)
                         .await?;
 
                 Ok(Self::Discord(client))
