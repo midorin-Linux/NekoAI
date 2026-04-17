@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use nekoai_config::loader::Config as AppConfig;
 use nekoai_domain::agent::session::SessionKey;
 use serde_json::Value;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use crate::{
     embedding::Embedder,
@@ -49,9 +49,31 @@ impl MemoryStore {
                 }
             }),
         ));
-        let embedder = Arc::new(crate::embedding::MockEmbedder::new(
-            config.provider.embedding_model.dimension as usize,
-        ));
+        let embedding_dim = config.provider.embedding_model.dimension as usize;
+        let embedder: Arc<dyn Embedder> = match crate::embedding::OpenAICompatibleEmbedder::new(
+            &config.provider.embedding_model.provider_base_url,
+            &config.provider.embedding_model.api_key,
+            &config.provider.embedding_model.model_name,
+            embedding_dim,
+        ) {
+            Ok(embedder) => {
+                info!(
+                    embedding_model = %config.provider.embedding_model.model_name,
+                    embedding_base_url = %config.provider.embedding_model.provider_base_url,
+                    embedding_dim = embedding_dim,
+                    "embedding model initialized"
+                );
+                Arc::new(embedder)
+            }
+            Err(error) => {
+                warn!(
+                    error = %error,
+                    embedding_model = %config.provider.embedding_model.model_name,
+                    "failed to initialize embedding model, falling back to mock embedder"
+                );
+                Arc::new(crate::embedding::MockEmbedder::new(embedding_dim))
+            }
+        };
 
         info!(
             qdrant_url = %config.memory.vector_db.url,

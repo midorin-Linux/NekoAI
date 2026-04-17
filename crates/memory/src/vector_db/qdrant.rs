@@ -59,7 +59,6 @@ impl VectorDbClient for QdrantClient {
             id: Some(qdrant_client::qdrant::PointId::from(point_id.clone())),
             vectors: Some(vector.into()),
             payload: payload_map,
-            ..Default::default()
         }];
 
         let builder =
