@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 
+use nekoai_memory::store::RecalledMemory;
 use tracing::debug;
 
 use crate::session::{ConversationTurn, Session};
@@ -26,7 +27,12 @@ impl ContextManager {
         }
     }
 
-    pub async fn build(&self, session: &Session, input: &str) -> Context {
+    pub async fn build(
+        &self,
+        session: &Session,
+        input: &str,
+        recalled_memory: &RecalledMemory,
+    ) -> Context {
         debug!(
             input_len = input.len(),
             session_turns = session.turns.len(),
@@ -47,12 +53,32 @@ impl ContextManager {
             );
         }
 
-        let system_prompt = self.base_system_prompt.clone();
+        let system_prompt = self.build_system_prompt_with_memory(recalled_memory);
 
         Context {
             system_prompt,
             turns,
             user_message: input.to_string(),
         }
+    }
+
+    fn build_system_prompt_with_memory(&self, recalled: &RecalledMemory) -> String {
+        let mut prompt = self.base_system_prompt.clone();
+
+        if !recalled.long_term.is_empty() {
+            prompt.push_str("\n\n## Important information that you remember\n");
+            for mem in &recalled.long_term {
+                prompt.push_str(&format!("- {}\n", mem.content));
+            }
+        }
+
+        if !recalled.mid_term.is_empty() {
+            prompt.push_str("\n\n## Related past conversations\n");
+            for summary in &recalled.mid_term {
+                prompt.push_str(&format!("- {}\n", summary.content));
+            }
+        }
+
+        prompt
     }
 }

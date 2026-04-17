@@ -23,7 +23,7 @@ pub struct Session {
 }
 
 pub struct SessionManager {
-    sessions: Vec<Session>,
+    sessions: VecDeque<Session>,
     max_messages: usize,
 }
 
@@ -36,7 +36,7 @@ impl Default for SessionManager {
 impl SessionManager {
     pub fn new() -> Self {
         Self {
-            sessions: Vec::new(),
+            sessions: VecDeque::new(),
             max_messages: 40,
         }
     }
@@ -94,7 +94,7 @@ impl SessionManager {
         }
 
         let now = Utc::now();
-        self.sessions.push(Session {
+        self.sessions.push_back(Session {
             key: session_key.clone(),
             messages: VecDeque::new(),
             turns: VecDeque::new(),
@@ -105,7 +105,7 @@ impl SessionManager {
 
         debug!(session = %session_key.channel_id, "created new session");
 
-        self.sessions.last_mut().expect("session was just inserted")
+        self.sessions.back_mut().expect("session was just inserted")
     }
 
     pub fn get(&mut self, session_key: &SessionKey) -> Result<&mut Session> {

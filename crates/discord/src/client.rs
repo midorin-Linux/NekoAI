@@ -34,8 +34,10 @@ impl DiscordClient {
             | GatewayIntents::GUILD_VOICE_STATES
             | GatewayIntents::GUILD_PRESENCES;
 
+        // Serenity用のhttpクライアントを先に作成
         let _http = Arc::new(serenity::all::Http::new(&discord_token));
 
+        // Serenity用のキャッシュを先に作成
         let _shared_cache = Arc::new(serenity::all::Cache::new());
 
         let command_framework =

@@ -150,12 +150,20 @@ impl AgentRuntime {
         };
         debug!(turn_count = session.turns.len(), "session loaded");
 
-        let context = self.context_manager.build(&session, &user_input).await;
+        let recalled = self.memory_store.recall(&session_key, &user_input);
+
+        let context = self
+            .context_manager
+            .build(&session, &user_input, &recalled)
+            .await;
         debug!(context_turns = context.turns.len(), "context built");
 
         let agent = self
             .provider
-            .build_agent(self.agent_model_name.as_str(), self.agent_parameters.clone())
+            .build_agent(
+                self.agent_model_name.as_str(),
+                self.agent_parameters.clone(),
+            )
             .build();
 
         let mut prompt_text = String::new();

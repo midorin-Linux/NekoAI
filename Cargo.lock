@@ -1861,11 +1861,17 @@ dependencies = [
  "anyhow",
  "chrono",
  "dashmap 7.0.0-rc2",
+ "nekoai-config",
  "nekoai-domain",
+ "qdrant-client",
  "rig-core",
  "rig-qdrant",
+ "serde",
+ "serde_json",
  "serenity",
+ "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -2187,9 +2193,11 @@ dependencies = [
  "anyhow",
  "derive_builder",
  "futures",
+ "futures-util",
  "parking_lot",
  "prost",
  "prost-types",
+ "reqwest 0.12.28",
  "semver",
  "serde",
  "serde_json",
@@ -2402,6 +2410,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-util",
+ "h2",
  "http",
  "http-body",
  "http-body-util",
@@ -3868,9 +3877,9 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uuid"
-version = "1.23.0"
+version = "1.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ac8b6f42ead25368cf5b098aeb3dc8a1a2c05a3eee8a9a1a68c640edbfc79d9"
+checksum = "ddd74a9687298c6858e9b88ec8935ec45d22e8fd5e6394fa1bd4e99a87789c76"
 dependencies = [
  "getrandom 0.4.2",
  "js-sys",

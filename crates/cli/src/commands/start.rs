@@ -130,7 +130,11 @@ impl StartCommand {
         info!("Initializing context memory");
 
         let _short_term_memory = ShortTermMemory::new(10);
-        let memory_store = MemoryStore::new();
+        let memory_store = MemoryStore::new(&config);
+
+        memory_store.initialize().inspect_err(|e| {
+            error!(error = %e, "failed to initialize vector memory collections");
+        })?;
 
         spinner.finish_and_clear();
 

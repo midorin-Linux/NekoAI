@@ -20,8 +20,8 @@ pub struct ShortTermEntry {
 }
 
 pub struct ShortTermMemory {
-    store: DashMap<SessionKey, VecDeque<ShortTermEntry>>,
-    max_entry: usize,
+    pub store: DashMap<SessionKey, VecDeque<ShortTermEntry>>,
+    pub max_entry: usize,
 }
 
 impl ShortTermMemory {
@@ -58,5 +58,20 @@ impl ShortTermMemory {
         }
 
         debug!(session = %session_key.channel_id, entry_count = query.len(), "short-term memory updated");
+    }
+
+    pub fn get_count(&self, session_key: &SessionKey) -> usize {
+        self.store.get(session_key).map(|v| v.len()).unwrap_or(0)
+    }
+
+    pub fn get_messages(&self, session_key: &SessionKey) -> Vec<ShortTermEntry> {
+        self.store
+            .get(session_key)
+            .map(|v| v.iter().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    pub fn clear(&self, session_key: &SessionKey) {
+        self.store.remove(session_key);
     }
 }

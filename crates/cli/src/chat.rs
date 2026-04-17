@@ -13,9 +13,12 @@ impl ChatClient {
         match &config.chat_platform {
             ChatPlatform::Discord => {
                 info!("initializing discord chat client");
-                let client =
-                    DiscordClient::new(config.discord.token.clone(), config.discord.guild_id, runtime)
-                        .await?;
+                let client = DiscordClient::new(
+                    config.discord.token.clone(),
+                    config.discord.guild_id,
+                    runtime,
+                )
+                .await?;
 
                 Ok(Self::Discord(client))
             }

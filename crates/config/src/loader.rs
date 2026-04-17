@@ -47,11 +47,90 @@ pub struct Provider {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+pub struct VectorDb {
+    #[serde(default = "default_qdrant_url")]
+    pub url: String,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default = "default_mid_term_collection")]
+    pub mid_term_collection: String,
+    #[serde(default = "default_long_term_collection")]
+    pub long_term_collection: String,
+}
+
+impl Default for VectorDb {
+    fn default() -> Self {
+        Self {
+            url: default_qdrant_url(),
+            api_key: None,
+            mid_term_collection: default_mid_term_collection(),
+            long_term_collection: default_long_term_collection(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Memory {
+    #[serde(default)]
+    pub vector_db: VectorDb,
+    #[serde(default = "default_short_term_max_entries")]
+    pub short_term_max_entries: usize,
+    #[serde(default = "default_mid_term_top_k")]
+    pub mid_term_top_k: usize,
+    #[serde(default = "default_long_term_top_k")]
+    pub long_term_top_k: usize,
+    #[serde(default = "default_mid_term_retention_days")]
+    pub mid_term_retention_days: u32,
+}
+
+impl Default for Memory {
+    fn default() -> Self {
+        Self {
+            vector_db: VectorDb::default(),
+            short_term_max_entries: default_short_term_max_entries(),
+            mid_term_top_k: default_mid_term_top_k(),
+            long_term_top_k: default_long_term_top_k(),
+            mid_term_retention_days: default_mid_term_retention_days(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     #[serde(default)]
     pub chat_platform: ChatPlatform,
     pub discord: Discord,
     pub provider: Provider,
+    #[serde(default)]
+    pub memory: Memory,
+}
+
+fn default_qdrant_url() -> String {
+    "http://localhost:6334".to_string()
+}
+
+fn default_mid_term_collection() -> String {
+    "mid_term".to_string()
+}
+
+fn default_long_term_collection() -> String {
+    "long_term".to_string()
+}
+
+const fn default_short_term_max_entries() -> usize {
+    20
+}
+
+const fn default_mid_term_top_k() -> usize {
+    3
+}
+
+const fn default_long_term_top_k() -> usize {
+    5
+}
+
+const fn default_mid_term_retention_days() -> u32 {
+    30
 }
 
 impl Config {

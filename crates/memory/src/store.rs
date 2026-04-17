@@ -1,24 +1,114 @@
+use std::{collections::HashMap, sync::Arc};
+
+use chrono::{DateTime, Utc};
 use nekoai_domain::agent::session::SessionKey;
+use serde_json::Value;
 use tracing::{debug, info};
 
-use crate::short_term::ShortTermMemory;
+use crate::{
+    embedding::Embedder,
+    long_term::LongTermMemory,
+    mid_term::MidTermMemory,
+    short_term::{ShortTermEntry, ShortTermMemory},
+};
+use nekoai_config::loader::Config as AppConfig;
 
 pub struct MemoryStore {
     short_term_memory: ShortTermMemory,
+    mid_term: Arc<MidTermMemory>,
+    long_term: Arc<LongTermMemory>,
+    embedder: Arc<dyn Embedder>,
+    mid_term_top_k: usize,
+    long_term_top_k: usize,
 }
 
-impl Default for MemoryStore {
-    fn default() -> Self {
-        Self::new()
-    }
+#[derive(Clone)]
+pub struct RecalledMemory {
+    pub mid_term: Vec<MemoryEntry>,
+    pub long_term: Vec<MemoryEntry>,
+}
+
+#[derive(Clone, Debug)]
+pub struct MemoryEntry {
+    pub content: String,
+    pub score: f32,
+    pub created_at: DateTime<Utc>,
+    pub metadata: HashMap<String, Value>,
 }
 
 impl MemoryStore {
-    pub fn new() -> Self {
-        let short_term_memory = ShortTermMemory::new(20);
-        info!("memory store initialized");
+    pub fn new(config: &AppConfig) -> Self {
+        let short_term_memory = ShortTermMemory::new(config.memory.short_term_max_entries);
+        let vector_db = Arc::new(crate::vector_db::qdrant::QdrantClient::new(
+            config.memory.vector_db.url.clone(),
+            config
+                .memory
+                .vector_db
+                .api_key
+                .as_ref()
+                .and_then(|value| if value.is_empty() { None } else { Some(value.clone()) }),
+        ));
+        let embedder = Arc::new(crate::embedding::MockEmbedder::new(
+            config.provider.embedding_model.dimension as usize,
+        ));
 
-        Self { short_term_memory }
+        info!(
+            qdrant_url = %config.memory.vector_db.url,
+            mid_collection = %config.memory.vector_db.mid_term_collection,
+            long_collection = %config.memory.vector_db.long_term_collection,
+            "memory store initialized"
+        );
+
+        Self {
+            short_term_memory,
+            mid_term: Arc::new(MidTermMemory::new(
+                vector_db.clone(),
+                embedder.clone(),
+                config.memory.vector_db.mid_term_collection.clone(),
+                config.memory.mid_term_retention_days,
+            )),
+            long_term: Arc::new(LongTermMemory::new(
+                vector_db,
+                embedder.clone(),
+                config.memory.vector_db.long_term_collection.clone(),
+            )),
+            embedder,
+            mid_term_top_k: config.memory.mid_term_top_k,
+            long_term_top_k: config.memory.long_term_top_k,
+        }
+    }
+
+    pub fn with_components(
+        mid_term: Arc<MidTermMemory>,
+        long_term: Arc<LongTermMemory>,
+        embedder: Arc<dyn Embedder>,
+        short_term_max: usize,
+        mid_term_top_k: usize,
+        long_term_top_k: usize,
+    ) -> Self {
+        let short_term_memory = ShortTermMemory::new(short_term_max);
+        info!(
+            short_term_max = short_term_max,
+            mid_term_top_k = mid_term_top_k,
+            long_term_top_k = long_term_top_k,
+            "memory store initialized"
+        );
+
+        Self {
+            short_term_memory,
+            mid_term,
+            long_term,
+            embedder,
+            mid_term_top_k,
+            long_term_top_k,
+        }
+    }
+
+    pub fn initialize(&self) -> anyhow::Result<()> {
+        let dim = self.embedder.dimension();
+        self.mid_term.ensure_collection(dim)?;
+        self.long_term.ensure_collection(dim)?;
+        Ok(())
     }
 
     pub fn push_short_term(&self, session_key: &SessionKey, user: &str, assistant: &str) {
@@ -30,5 +120,71 @@ impl MemoryStore {
         );
         self.short_term_memory
             .push_turn(session_key, user, assistant);
+    }
+
+    pub fn recall(&self, session_key: &SessionKey, query: &str) -> RecalledMemory {
+        let mid_term = self
+            .mid_term
+            .search(session_key, query, self.mid_term_top_k)
+            .unwrap_or_default();
+        let long_term = self
+            .long_term
+            .search(session_key, query, self.long_term_top_k)
+            .unwrap_or_default();
+
+        debug!(
+            session = %session_key.channel_id,
+            mid_count = mid_term.len(),
+            long_count = long_term.len(),
+            "recalled memories"
+        );
+
+        RecalledMemory {
+            mid_term,
+            long_term,
+        }
+    }
+
+    pub fn should_summarize(&self, session_key: &SessionKey) -> bool {
+        self.short_term_memory.get_count(session_key) >= self.short_term_memory.max_entry
+    }
+
+    pub fn promote_to_mid_term(
+        &self,
+        session_key: &SessionKey,
+        summary: String,
+    ) -> anyhow::Result<()> {
+        let messages = self.short_term_memory.get_messages(session_key);
+
+        self.mid_term
+            .store_summary(session_key, &messages, summary)?;
+
+        self.short_term_memory.clear(session_key);
+
+        debug!(session = %session_key.channel_id, "promoted short-term to mid-term");
+        Ok(())
+    }
+
+    pub fn extract_long_term(
+        &self,
+        session_key: &SessionKey,
+        facts: Vec<(String, Vec<String>)>,
+    ) -> anyhow::Result<()> {
+        let fact_count = facts.len();
+        for (fact, tags) in facts {
+            self.long_term.store(session_key, fact, tags)?;
+        }
+
+        debug!(session = %session_key.channel_id, fact_count = fact_count, "extracted long-term facts");
+        Ok(())
+    }
+
+    pub fn get_short_term_messages(&self, session_key: &SessionKey) -> Vec<ShortTermEntry> {
+        self.short_term_memory.get_messages(session_key)
+    }
+
+    pub fn clear_short_term(&self, session_key: &SessionKey) {
+        self.short_term_memory.clear(session_key);
+        debug!(session = %session_key.channel_id, "cleared short-term memory");
     }
 }

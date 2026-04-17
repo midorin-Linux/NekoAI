@@ -1,1 +1,252 @@
+use std::collections::HashMap;
 
+use tracing::{debug, info};
+
+use super::{
+    FilterCondition, SearchFilter, SearchRequest, SearchResult, UpsertRequest, VectorDbClient,
+};
+
+pub struct QdrantClient {
+    url: String,
+    api_key: Option<String>,
+}
+
+impl QdrantClient {
+    pub fn new(url: String, api_key: Option<String>) -> Self {
+        info!("qdrant client configured for {}", url);
+        Self { url, api_key }
+    }
+
+    fn client(&self) -> anyhow::Result<qdrant_client::Qdrant> {
+        let builder = qdrant_client::Qdrant::from_url(&self.url);
+        let builder = if let Some(api_key) = self.api_key.as_deref() {
+            builder.api_key(api_key)
+        } else {
+            builder
+        };
+
+        Ok(builder.build()?)
+    }
+
+    fn run_async<T, E>(future: impl std::future::Future<Output = Result<T, E>>) -> anyhow::Result<T>
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        let result = if tokio::runtime::Handle::try_current().is_ok() {
+            tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(future))
+        } else {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()?;
+            rt.block_on(future)
+        };
+
+        result.map_err(Into::into)
+    }
+}
+
+impl VectorDbClient for QdrantClient {
+    fn upsert(&self, req: UpsertRequest<'_>) -> anyhow::Result<()> {
+        let client = self.client()?;
+
+        let vector = qdrant_client::qdrant::Vector::from(req.vector);
+        let point_id = req.id.to_string();
+
+        let payload: qdrant_client::Payload = req.payload.clone().into();
+        let payload_map: HashMap<String, qdrant_client::qdrant::Value> = payload.into();
+
+        let points = vec![qdrant_client::qdrant::PointStruct {
+            id: Some(qdrant_client::qdrant::PointId::from(point_id.clone())),
+            vectors: Some(vector.into()),
+            payload: payload_map,
+            ..Default::default()
+        }];
+
+        let builder =
+            qdrant_client::qdrant::UpsertPointsBuilder::new(req.collection.to_string(), points);
+
+        Self::run_async(async { client.upsert_points(builder).await })?;
+
+        debug!(collection = req.collection, id = %point_id, "upserted point");
+        Ok(())
+    }
+
+    fn search(&self, req: SearchRequest<'_>) -> anyhow::Result<Vec<SearchResult>> {
+        let client = self.client()?;
+
+        let filter = req.filter.as_ref().map(build_filter);
+
+        let mut builder = qdrant_client::qdrant::SearchPointsBuilder::new(
+            req.collection.to_string(),
+            req.vector.clone(),
+            req.top_k as u64,
+        );
+
+        if let Some(f) = filter {
+            builder = builder.filter(f);
+        }
+
+        let results = Self::run_async(async { client.search_points(builder).await })?;
+
+        let search_results = results
+            .result
+            .into_iter()
+            .map(|point| {
+                let score = point.score;
+                let id = point.id.and_then(point_id_to_string).unwrap_or_default();
+                let payload: HashMap<String, serde_json::Value> = point
+                    .payload
+                    .into_iter()
+                    .map(|(k, v)| (k, serde_json::Value::from(v)))
+                    .collect();
+
+                SearchResult { id, score, payload }
+            })
+            .collect();
+
+        Ok(search_results)
+    }
+
+    fn delete(&self, collection: &str, id: &str) -> anyhow::Result<()> {
+        let client = self.client()?;
+
+        let builder = qdrant_client::qdrant::DeletePointsBuilder::new(collection.to_string());
+        let builder = builder.points(vec![point_id_from_str(id)]).wait(true);
+
+        Self::run_async(async { client.delete_points(builder).await })?;
+
+        debug!(collection = collection, id = %id, "deleted point");
+        Ok(())
+    }
+
+    fn delete_by_filter(&self, collection: &str, filter: SearchFilter) -> anyhow::Result<u64> {
+        let client = self.client()?;
+        let qdrant_filter = build_filter(&filter);
+
+        let count_response = Self::run_async(async {
+            client
+                .count(
+                    qdrant_client::qdrant::CountPointsBuilder::new(collection.to_string())
+                        .filter(qdrant_filter.clone())
+                        .exact(true),
+                )
+                .await
+        })?;
+
+        let deleted = count_response.result.map(|r| r.count).unwrap_or(0);
+        if deleted == 0 {
+            return Ok(0);
+        }
+
+        let delete_builder =
+            qdrant_client::qdrant::DeletePointsBuilder::new(collection.to_string())
+                .points(qdrant_filter)
+                .wait(true);
+
+        Self::run_async(async { client.delete_points(delete_builder).await })?;
+
+        Ok(deleted)
+    }
+
+    fn ensure_collection(&self, name: &str, dim: usize) -> anyhow::Result<()> {
+        let client = self.client()?;
+
+        let exists = Self::run_async(async { client.collection_exists(name).await })?;
+
+        if !exists {
+            info!(collection = name, dim = dim, "creating collection");
+
+            let builder = qdrant_client::qdrant::CreateCollectionBuilder::new(name.to_string())
+                .vectors_config(qdrant_client::qdrant::VectorParams {
+                    size: dim as u64,
+                    distance: qdrant_client::qdrant::Distance::Cosine.into(),
+                    ..Default::default()
+                });
+
+            Self::run_async(async { client.create_collection(builder).await })?;
+        }
+
+        Ok(())
+    }
+}
+
+fn build_filter(filter: &SearchFilter) -> qdrant_client::qdrant::Filter {
+    qdrant_client::qdrant::Filter {
+        must: filter.must.iter().map(build_condition).collect(),
+        should: filter.should.iter().map(build_condition).collect(),
+        ..Default::default()
+    }
+}
+
+fn build_condition(condition: &FilterCondition) -> qdrant_client::qdrant::Condition {
+    match condition {
+        FilterCondition::Match { key, value } => match value {
+            serde_json::Value::Null => qdrant_client::qdrant::Condition::is_null(key.clone()),
+            serde_json::Value::String(s) => {
+                qdrant_client::qdrant::Condition::matches(key.clone(), s.clone())
+            }
+            serde_json::Value::Number(n) => {
+                if let Some(v) = n.as_i64() {
+                    qdrant_client::qdrant::Condition::matches(key.clone(), v)
+                } else if let Some(v) = n.as_u64() {
+                    match i64::try_from(v) {
+                        Ok(v) => qdrant_client::qdrant::Condition::matches(key.clone(), v),
+                        Err(_) => {
+                            qdrant_client::qdrant::Condition::matches(key.clone(), v.to_string())
+                        }
+                    }
+                } else if let Some(v) = n.as_f64() {
+                    qdrant_client::qdrant::Condition::matches(key.clone(), v.to_string())
+                } else {
+                    qdrant_client::qdrant::Condition::matches(key.clone(), value.to_string())
+                }
+            }
+            serde_json::Value::Bool(b) => {
+                qdrant_client::qdrant::Condition::matches(key.clone(), *b)
+            }
+            serde_json::Value::Array(values) => {
+                let string_values: Option<Vec<String>> = values
+                    .iter()
+                    .map(|value| value.as_str().map(ToOwned::to_owned))
+                    .collect();
+
+                match string_values {
+                    Some(values) => qdrant_client::qdrant::Condition::matches(key.clone(), values),
+                    None => {
+                        qdrant_client::qdrant::Condition::matches(key.clone(), value.to_string())
+                    }
+                }
+            }
+            serde_json::Value::Object(_) => {
+                qdrant_client::qdrant::Condition::matches(key.clone(), value.to_string())
+            }
+        },
+        FilterCondition::Range { key, lt, gt } => {
+            let mut range = qdrant_client::qdrant::Range::default();
+            if let Some(v) = lt {
+                range.lt = Some(*v);
+            }
+            if let Some(v) = gt {
+                range.gt = Some(*v);
+            }
+            qdrant_client::qdrant::Condition::range(key.clone(), range)
+        }
+    }
+}
+
+fn point_id_to_string(point_id: qdrant_client::qdrant::PointId) -> Option<String> {
+    match point_id.point_id_options {
+        Some(qdrant_client::qdrant::point_id::PointIdOptions::Num(value)) => {
+            Some(value.to_string())
+        }
+        Some(qdrant_client::qdrant::point_id::PointIdOptions::Uuid(value)) => Some(value),
+        None => None,
+    }
+}
+
+fn point_id_from_str(id: &str) -> qdrant_client::qdrant::PointId {
+    match id.parse::<u64>() {
+        Ok(value) => qdrant_client::qdrant::PointId::from(value),
+        Err(_) => qdrant_client::qdrant::PointId::from(id),
+    }
+}
