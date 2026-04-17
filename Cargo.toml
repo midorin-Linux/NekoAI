@@ -38,5 +38,6 @@ rig-core = { version = "0.35.0", features = ["image", "derive"]}
 rig-qdrant = "0.2.4"
 serenity = { version = "0.12.5", features = ["full"] }
 serde = { version = "1.0.228", features = ["derive"] }
-tokio = { version = "1.52.0", features = ["full"] }
+serde_json = "1.0.149"
+tokio = { version = "1.52.1", features = ["full"] }
 tracing = "0.1.44"

@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
-use nekoai_config::loader::Config;
+use nekoai_config::loader::{Config, Parameters};
 use nekoai_domain::agent::session::SessionKey;
 use nekoai_memory::store::MemoryStore;
 use rig::completion::Prompt;
@@ -44,6 +44,7 @@ pub struct AgentRuntime {
     provider: Arc<OpenAICompatibleAdapter>,
     // tool_registry: Arc<ToolRegistry>,
     agent_model_name: String,
+    agent_parameters: Parameters,
 }
 
 impl AgentRuntime {
@@ -99,6 +100,7 @@ impl AgentRuntime {
         );
 
         let agent_model_name = config.provider.language_model.model_name;
+        let agent_parameters = config.provider.language_model.parameters;
 
         info!("agent runtime initialized");
         on_progress(RuntimeInitProgress::new(5, "agent runtime initialized"));
@@ -109,6 +111,7 @@ impl AgentRuntime {
             memory_store,
             provider,
             agent_model_name,
+            agent_parameters,
         })
     }
 
@@ -152,7 +155,7 @@ impl AgentRuntime {
 
         let agent = self
             .provider
-            .build_agent(self.agent_model_name.as_str())
+            .build_agent(self.agent_model_name.as_str(), self.agent_parameters.clone())
             .build();
 
         let mut prompt_text = String::new();

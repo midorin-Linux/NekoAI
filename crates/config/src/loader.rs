@@ -17,10 +17,18 @@ pub enum ChatPlatform {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+pub struct Parameters {
+    pub max_token: u64,
+    pub temperature: f64,
+    pub top_p: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct LanguageModel {
     pub provider_base_url: String,
     pub api_key: String,
     pub model_name: String,
+    pub parameters: Parameters,
 }
 
 #[derive(Debug, Clone, Deserialize)]

@@ -3,6 +3,8 @@ use rig::{
     client::CompletionClient,
     providers::openai::{self, completion::CompletionModel},
 };
+use serde_json::json;
+use nekoai_config::loader::Parameters;
 
 pub struct OpenAICompatibleAdapter {
     client: openai::CompletionsClient,
@@ -13,8 +15,14 @@ impl OpenAICompatibleAdapter {
         Self { client }
     }
 
-    pub fn build_agent(&self, model: &str) -> AgentBuilder<CompletionModel> {
+    pub fn build_agent(&self, model: &str, parameters: Parameters) -> AgentBuilder<CompletionModel> {
         self.client.agent(model)
+            .max_tokens(parameters.max_token)
+            .temperature(parameters.temperature)
+            .max_tokens(parameters.max_token)
+            .additional_params(json!({
+                "top_p": parameters.top_p,
+            }))
     }
 
     pub fn provider_name(&self) -> &str {
