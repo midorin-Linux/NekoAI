@@ -6,7 +6,6 @@ license.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+config = { workspace = true }
 serde = { workspace = true }
 tracing = { workspace = true }
-
-config = "0.15.22"

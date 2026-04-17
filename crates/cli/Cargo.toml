@@ -6,6 +6,8 @@ license.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+clap = { workspace = true }
+clap_derive = { workspace = true }
 nekoai-agent = { workspace = true }
 nekoai-config = { workspace = true }
 nekoai-discord = { workspace = true }
@@ -17,6 +19,3 @@ indicatif = { workspace = true }
 #setup = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-
-clap = { version = "4.6.0", features = ["derive"] }
-clap_derive = "4.6.0"
