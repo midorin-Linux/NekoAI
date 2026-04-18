@@ -12,5 +12,6 @@ dialoguer = { workspace = true }
 indicatif = { workspace = true }
 nekoai-domain = { workspace = true }
 poise = { workspace = true }
+rig-core = { workspace = true }
 serenity = { workspace = true }
 tracing = { workspace = true }

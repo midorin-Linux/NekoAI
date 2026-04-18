@@ -1830,6 +1830,7 @@ dependencies = [
  "nekoai-agent",
  "nekoai-domain",
  "poise",
+ "rig-core",
  "serenity",
  "tracing",
 ]

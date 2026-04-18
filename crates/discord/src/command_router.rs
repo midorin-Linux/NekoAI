@@ -1,6 +1,6 @@
 use nekoai_agent::runtime::AgentRuntime;
 
-use crate::commands::{ask, clear};
+use crate::commands::{ask, clear, history};
 
 pub struct Data {
     pub agent_runtime: AgentRuntime,
@@ -33,7 +33,7 @@ pub async fn command_framework(
     guild_id: u64,
     agent_runtime: AgentRuntime,
 ) -> poise::framework::Framework<Data, anyhow::Error> {
-    let commands = vec![ask(), clear()];
+    let commands = vec![ask(), clear(), history()];
 
     poise::Framework::builder()
         .options(poise::FrameworkOptions {
