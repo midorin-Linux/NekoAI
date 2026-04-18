@@ -32,7 +32,7 @@ pub async fn clear(ctx: Context<'_>) -> anyhow::Result<()> {
 
     debug!(session = %session_key.channel_id, "session key resolved");
 
-    match ctx.data().agent_runtime.clear_session(&session_key) {
+    match ctx.data().agent_runtime.clear_session(&session_key).await {
         Ok(_) => {
             info!(
                 target_session = session_key.channel_id.to_string(),

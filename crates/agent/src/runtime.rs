@@ -3,9 +3,13 @@ use std::sync::{Arc, Mutex};
 use anyhow::{Context, Result};
 use nekoai_config::loader::{Config, Parameters};
 use nekoai_domain::agent::session::SessionKey;
-use nekoai_memory::store::MemoryStore;
+use nekoai_memory::{
+    short_term::{Role, ShortTermEntry},
+    store::MemoryStore,
+};
 use rig::completion::Prompt;
-use tracing::{debug, info};
+use serde::Deserialize;
+use tracing::{debug, info, warn};
 
 use crate::{
     context::ContextManager,
@@ -34,6 +38,13 @@ impl RuntimeInitProgress {
 
 pub struct AgentResponse {
     pub content: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ExtractedFact {
+    fact: String,
+    #[serde(default)]
+    tags: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -115,7 +126,20 @@ impl AgentRuntime {
         })
     }
 
-    pub fn clear_session(&self, session_key: &SessionKey) -> Result<()> {
+    pub async fn clear_session(&self, session_key: &SessionKey) -> Result<()> {
+        if let Err(error) = self
+            .promote_short_term_to_mid_term(session_key, "clear_command")
+            .await
+        {
+            warn!(
+                session = %session_key.channel_id,
+                error = %error,
+                "failed to promote short-term memory before clearing session"
+            );
+        }
+
+        self.memory_store.clear_short_term(session_key);
+
         let mut session_manager = self
             .session_manager
             .lock()
@@ -184,6 +208,20 @@ impl AgentRuntime {
         self.memory_store
             .push_short_term(&session_key, &user_input, result.as_str());
         debug!("short-term memory updated");
+
+        if self.memory_store.should_summarize(&session_key) {
+            if let Err(error) = self
+                .promote_short_term_to_mid_term(&session_key, "compression_threshold")
+                .await
+            {
+                warn!(
+                    session = %session_key.channel_id,
+                    error = %error,
+                    "failed to promote short-term memory at compression threshold"
+                );
+            }
+        }
+
         {
             let mut session_manager = self
                 .session_manager
@@ -193,6 +231,172 @@ impl AgentRuntime {
         }
         debug!("session history updated");
 
+        self.spawn_long_term_extraction(session_key.clone(), result.clone());
+
         Ok(AgentResponse { content: result })
     }
+
+    async fn promote_short_term_to_mid_term(
+        &self,
+        session_key: &SessionKey,
+        trigger: &'static str,
+    ) -> Result<()> {
+        let messages = self.memory_store.get_short_term_messages(session_key);
+        if messages.is_empty() {
+            debug!(
+                session = %session_key.channel_id,
+                trigger = trigger,
+                "skipped mid-term promotion because short-term memory is empty"
+            );
+            return Ok(());
+        }
+
+        let summary = self.generate_mid_term_summary(&messages).await?;
+        self.memory_store
+            .promote_to_mid_term(session_key, summary)
+            .context("failed to store summary in mid-term memory")?;
+
+        info!(
+            session = %session_key.channel_id,
+            trigger = trigger,
+            message_count = messages.len(),
+            "promoted short-term memory to mid-term"
+        );
+
+        Ok(())
+    }
+
+    async fn generate_mid_term_summary(&self, messages: &[ShortTermEntry]) -> Result<String> {
+        let conversation = format_short_term_messages(messages);
+        let prompt = format!(
+            "以下は同一セッションの会話ログです。\n会話の流れと決定事項を保ちつつ、この会話の要点を3文で要約してください。\n箇条書きではなく自然な文章で出力し、3文以外は出力しないでください。\n\n会話ログ:\n{}",
+            conversation
+        );
+
+        let summarizer = self
+            .provider
+            .build_agent(
+                self.agent_model_name.as_str(),
+                self.agent_parameters.clone(),
+            )
+            .build();
+
+        let summary = summarizer.prompt(prompt).await?;
+        Ok(summary.trim().to_string())
+    }
+
+    fn spawn_long_term_extraction(&self, session_key: SessionKey, response: String) {
+        let provider = self.provider.clone();
+        let memory_store = self.memory_store.clone();
+        let model = self.agent_model_name.clone();
+        let parameters = self.agent_parameters.clone();
+
+        tokio::spawn(async move {
+            if let Err(error) = extract_and_store_long_term_facts(
+                provider,
+                memory_store,
+                model,
+                parameters,
+                session_key,
+                response,
+            )
+            .await
+            {
+                warn!(error = %error, "failed to extract long-term memory facts");
+            }
+        });
+    }
+}
+
+fn format_short_term_messages(messages: &[ShortTermEntry]) -> String {
+    let mut formatted = String::new();
+
+    for entry in messages {
+        formatted.push_str(role_label(&entry.role));
+        formatted.push_str(": ");
+        formatted.push_str(entry.content.trim());
+        formatted.push('\n');
+    }
+
+    formatted
+}
+
+fn role_label(role: &Role) -> &'static str {
+    match role {
+        Role::User => "User",
+        Role::Assistant => "Assistant",
+        Role::Tool => "Tool",
+    }
+}
+
+async fn extract_and_store_long_term_facts(
+    provider: Arc<OpenAICompatibleAdapter>,
+    memory_store: Arc<MemoryStore>,
+    model: String,
+    parameters: Parameters,
+    session_key: SessionKey,
+    response: String,
+) -> Result<()> {
+    let extractor = provider.build_agent(model.as_str(), parameters).build();
+    let prompt = format!(
+        "以下の応答から、将来の会話で参照すべき重要な情報があれば JSON で出力してください。\nなければ空配列を返してください。\n\n形式: [{{\"fact\": \"...\", \"tags\": [\"...\"]}}]\n\n応答: {}",
+        response
+    );
+
+    let extracted = extractor.prompt(prompt).await?;
+    let facts = parse_extracted_facts(&extracted);
+
+    if facts.is_empty() {
+        debug!(
+            session = %session_key.channel_id,
+            "no long-term facts were extracted"
+        );
+        return Ok(());
+    }
+
+    let fact_count = facts.len();
+    memory_store
+        .extract_long_term(&session_key, facts)
+        .context("failed to store extracted long-term facts")?;
+
+    info!(
+        session = %session_key.channel_id,
+        fact_count = fact_count,
+        "stored extracted long-term facts"
+    );
+
+    Ok(())
+}
+
+fn parse_extracted_facts(raw: &str) -> Vec<(String, Vec<String>)> {
+    parse_extracted_facts_json(raw)
+        .or_else(|| {
+            let trimmed = raw.trim();
+            let start = trimmed.find('[')?;
+            let end = trimmed.rfind(']')?;
+
+            if end < start {
+                return None;
+            }
+
+            parse_extracted_facts_json(&trimmed[start..=end])
+        })
+        .unwrap_or_default()
+}
+
+fn parse_extracted_facts_json(candidate: &str) -> Option<Vec<(String, Vec<String>)>> {
+    let parsed: Vec<ExtractedFact> = serde_json::from_str(candidate).ok()?;
+    let facts = parsed
+        .into_iter()
+        .filter_map(|item| {
+            let fact = item.fact.trim();
+            if fact.is_empty() {
+                return None;
+            }
+
+            Some((fact.to_string(), item.tags))
+        })
+        .collect();
+
+    Some(facts)
 }
