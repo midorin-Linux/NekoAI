@@ -209,17 +209,16 @@ impl AgentRuntime {
             .push_short_term(&session_key, &user_input, result.as_str());
         debug!("short-term memory updated");
 
-        if self.memory_store.should_summarize(&session_key) {
-            if let Err(error) = self
+        if self.memory_store.should_summarize(&session_key)
+            && let Err(error) = self
                 .promote_short_term_to_mid_term(&session_key, "compression_threshold")
                 .await
-            {
-                warn!(
-                    session = %session_key.channel_id,
-                    error = %error,
-                    "failed to promote short-term memory at compression threshold"
-                );
-            }
+        {
+            warn!(
+                session = %session_key.channel_id,
+                error = %error,
+                "failed to promote short-term memory at compression threshold"
+            );
         }
 
         {
@@ -379,7 +378,7 @@ fn parse_extracted_facts(raw: &str) -> Vec<(String, Vec<String>)> {
                 return None;
             }
 
-            parse_extracted_facts_json(&trimmed[start..=end])
+            parse_extracted_facts_json(&trimmed[start ..= end])
         })
         .unwrap_or_default()
 }
