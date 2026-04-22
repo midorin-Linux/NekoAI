@@ -69,7 +69,7 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --locked --verbose
 
-  security:
+security:
     name: security checks
     runs-on: ubuntu-latest
     steps:
@@ -84,7 +84,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo-audit
-        run: cargo install cargo-audit --locked
+        uses: taiki-e/install-action@cargo-audit
 
       - name: Cargo audit
         run: cargo audit
