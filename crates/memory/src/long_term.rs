@@ -32,14 +32,20 @@ impl LongTermMemory {
         }
     }
 
-    pub fn ensure_collection(&self, dim: usize) -> Result<()> {
-        self.db.ensure_collection(&self.collection, dim)?;
+    pub async fn ensure_collection(&self, dim: usize) -> Result<()> {
+        self.db.ensure_collection(&self.collection, dim).await?;
         info!(collection = %self.collection, "long-term memory initialized");
         Ok(())
     }
 
-    pub fn store(&self, session_key: &SessionKey, fact: String, tags: Vec<String>) -> Result<()> {
-        let embedding = self.embedder.embed(&fact);
+    pub async fn store(
+        &self,
+        session_key: &SessionKey,
+        user_id: Option<&str>,
+        fact: String,
+        tags: Vec<String>,
+    ) -> Result<()> {
+        let embedding = self.embedder.embed(&fact).await;
         let id = Uuid::new_v4().to_string();
         let now = Utc::now().timestamp();
 
@@ -60,33 +66,49 @@ impl LongTermMemory {
         payload.insert("created_at".to_string(), json!(now));
         payload.insert("tags".to_string(), json!(tags));
 
-        self.db.upsert(crate::vector_db::UpsertRequest {
-            collection: &self.collection,
-            id: &id,
-            vector: embedding,
-            payload,
-        })?;
+        if let Some(uid) = user_id {
+            payload.insert("user_id".to_string(), json!(uid));
+        }
+
+        self.db
+            .upsert(crate::vector_db::UpsertRequest {
+                collection: &self.collection,
+                id: &id,
+                vector: embedding,
+                payload,
+            })
+            .await?;
 
         debug!(id = %id, session = %session_key.channel_id, "stored long-term fact");
         Ok(())
     }
 
-    pub fn search(
+    /// Search long-term memories by guild only (for server-wide facts)
+    pub async fn search_by_guild(
         &self,
-        session_key: &SessionKey,
+        guild_id: &str,
         query: &str,
         top_k: usize,
     ) -> Result<Vec<MemoryEntry>> {
-        let embedding = self.embedder.embed(query);
+        let embedding = self.embedder.embed(query).await;
 
-        let filter = session_scope_filter(session_key);
+        let filter = SearchFilter {
+            must: vec![FilterCondition::Match {
+                key: "guild_id".to_string(),
+                value: json!(guild_id),
+            }],
+            should: vec![],
+        };
 
-        let results = self.db.search(crate::vector_db::SearchRequest {
-            collection: &self.collection,
-            vector: embedding,
-            filter: Some(filter),
-            top_k,
-        })?;
+        let results = self
+            .db
+            .search(crate::vector_db::SearchRequest {
+                collection: &self.collection,
+                vector: embedding,
+                filter: Some(filter),
+                top_k,
+            })
+            .await?;
 
         let entries = results
             .into_iter()
@@ -116,13 +138,116 @@ impl LongTermMemory {
         Ok(entries)
     }
 
-    pub fn delete(&self, id: &str) -> Result<()> {
-        self.db.delete(&self.collection, id)?;
+    /// Search long-term memories by user_id (for user-specific facts)
+    pub async fn search_by_user(
+        &self,
+        user_id: &str,
+        query: &str,
+        top_k: usize,
+    ) -> Result<Vec<MemoryEntry>> {
+        let embedding = self.embedder.embed(query).await;
+
+        let filter = SearchFilter {
+            must: vec![FilterCondition::Match {
+                key: "user_id".to_string(),
+                value: json!(user_id),
+            }],
+            should: vec![],
+        };
+
+        let results = self
+            .db
+            .search(crate::vector_db::SearchRequest {
+                collection: &self.collection,
+                vector: embedding,
+                filter: Some(filter),
+                top_k,
+            })
+            .await?;
+
+        let entries = results
+            .into_iter()
+            .map(|r| {
+                let content = r
+                    .payload
+                    .get("content")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let created_at = r
+                    .payload
+                    .get("created_at")
+                    .and_then(|v| v.as_i64())
+                    .map(|ts| DateTime::from_timestamp(ts, 0).unwrap_or_default())
+                    .unwrap_or_default();
+
+                MemoryEntry {
+                    content,
+                    score: r.score,
+                    created_at,
+                    metadata: r.payload,
+                }
+            })
+            .collect();
+
+        Ok(entries)
+    }
+
+    pub async fn search(
+        &self,
+        session_key: &SessionKey,
+        query: &str,
+        top_k: usize,
+    ) -> Result<Vec<MemoryEntry>> {
+        let embedding = self.embedder.embed(query).await;
+
+        let filter = session_scope_filter(session_key);
+
+        let results = self
+            .db
+            .search(crate::vector_db::SearchRequest {
+                collection: &self.collection,
+                vector: embedding,
+                filter: Some(filter),
+                top_k,
+            })
+            .await?;
+
+        let entries = results
+            .into_iter()
+            .map(|r| {
+                let content = r
+                    .payload
+                    .get("content")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let created_at = r
+                    .payload
+                    .get("created_at")
+                    .and_then(|v| v.as_i64())
+                    .map(|ts| DateTime::from_timestamp(ts, 0).unwrap_or_default())
+                    .unwrap_or_default();
+
+                MemoryEntry {
+                    content,
+                    score: r.score,
+                    created_at,
+                    metadata: r.payload,
+                }
+            })
+            .collect();
+
+        Ok(entries)
+    }
+
+    pub async fn delete(&self, id: &str) -> Result<()> {
+        self.db.delete(&self.collection, id).await?;
         debug!(id = %id, "deleted long-term fact");
         Ok(())
     }
 
-    pub fn delete_by_channel(&self, channel_id: &str) -> Result<u64> {
+    pub async fn delete_by_channel(&self, channel_id: &str) -> Result<u64> {
         let filter = SearchFilter {
             must: vec![FilterCondition::Match {
                 key: "channel_id".to_string(),
@@ -131,7 +256,7 @@ impl LongTermMemory {
             should: vec![],
         };
 
-        let deleted = self.db.delete_by_filter(&self.collection, filter)?;
+        let deleted = self.db.delete_by_filter(&self.collection, filter).await?;
 
         if deleted > 0 {
             debug!(

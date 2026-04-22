@@ -1861,6 +1861,7 @@ name = "nekoai-memory"
 version = "1.0.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "chrono",
  "dashmap 7.0.0-rc2",
  "nekoai-config",

@@ -1,14 +1,18 @@
 use std::collections::HashMap;
 
+use async_trait::async_trait;
+
 pub mod inmemory;
 pub mod qdrant;
 
+#[async_trait]
 pub trait VectorDbClient: Send + Sync {
-    fn upsert(&self, req: UpsertRequest<'_>) -> anyhow::Result<()>;
-    fn search(&self, req: SearchRequest<'_>) -> anyhow::Result<Vec<SearchResult>>;
-    fn delete(&self, collection: &str, id: &str) -> anyhow::Result<()>;
-    fn delete_by_filter(&self, collection: &str, filter: SearchFilter) -> anyhow::Result<u64>;
-    fn ensure_collection(&self, name: &str, dim: usize) -> anyhow::Result<()>;
+    async fn upsert(&self, req: UpsertRequest<'_>) -> anyhow::Result<()>;
+    async fn search(&self, req: SearchRequest<'_>) -> anyhow::Result<Vec<SearchResult>>;
+    async fn delete(&self, collection: &str, id: &str) -> anyhow::Result<()>;
+    async fn delete_by_filter(&self, collection: &str, filter: SearchFilter)
+    -> anyhow::Result<u64>;
+    async fn ensure_collection(&self, name: &str, dim: usize) -> anyhow::Result<()>;
 }
 
 #[derive(Debug, Clone)]

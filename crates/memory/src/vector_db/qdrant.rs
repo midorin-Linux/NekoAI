@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use async_trait::async_trait;
 use tracing::{debug, info};
 
 use super::{
@@ -27,26 +28,11 @@ impl QdrantClient {
 
         Ok(builder.build()?)
     }
-
-    fn run_async<T, E>(future: impl std::future::Future<Output = Result<T, E>>) -> anyhow::Result<T>
-    where
-        E: std::error::Error + Send + Sync + 'static,
-    {
-        let result = if tokio::runtime::Handle::try_current().is_ok() {
-            tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(future))
-        } else {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()?;
-            rt.block_on(future)
-        };
-
-        result.map_err(Into::into)
-    }
 }
 
+#[async_trait]
 impl VectorDbClient for QdrantClient {
-    fn upsert(&self, req: UpsertRequest<'_>) -> anyhow::Result<()> {
+    async fn upsert(&self, req: UpsertRequest<'_>) -> anyhow::Result<()> {
         let client = self.client()?;
 
         let vector = qdrant_client::qdrant::Vector::from(req.vector);
@@ -64,13 +50,13 @@ impl VectorDbClient for QdrantClient {
         let builder =
             qdrant_client::qdrant::UpsertPointsBuilder::new(req.collection.to_string(), points);
 
-        Self::run_async(async { client.upsert_points(builder).await })?;
+        client.upsert_points(builder).await?;
 
         debug!(collection = req.collection, id = %point_id, "upserted point");
         Ok(())
     }
 
-    fn search(&self, req: SearchRequest<'_>) -> anyhow::Result<Vec<SearchResult>> {
+    async fn search(&self, req: SearchRequest<'_>) -> anyhow::Result<Vec<SearchResult>> {
         let client = self.client()?;
 
         let filter = req.filter.as_ref().map(build_filter);
@@ -85,7 +71,7 @@ impl VectorDbClient for QdrantClient {
             builder = builder.filter(f);
         }
 
-        let results = Self::run_async(async { client.search_points(builder).await })?;
+        let results = client.search_points(builder).await?;
 
         let search_results = results
             .result
@@ -106,31 +92,33 @@ impl VectorDbClient for QdrantClient {
         Ok(search_results)
     }
 
-    fn delete(&self, collection: &str, id: &str) -> anyhow::Result<()> {
+    async fn delete(&self, collection: &str, id: &str) -> anyhow::Result<()> {
         let client = self.client()?;
 
         let builder = qdrant_client::qdrant::DeletePointsBuilder::new(collection.to_string());
         let builder = builder.points(vec![point_id_from_str(id)]).wait(true);
 
-        Self::run_async(async { client.delete_points(builder).await })?;
+        client.delete_points(builder).await?;
 
         debug!(collection = collection, id = %id, "deleted point");
         Ok(())
     }
 
-    fn delete_by_filter(&self, collection: &str, filter: SearchFilter) -> anyhow::Result<u64> {
+    async fn delete_by_filter(
+        &self,
+        collection: &str,
+        filter: SearchFilter,
+    ) -> anyhow::Result<u64> {
         let client = self.client()?;
         let qdrant_filter = build_filter(&filter);
 
-        let count_response = Self::run_async(async {
-            client
-                .count(
-                    qdrant_client::qdrant::CountPointsBuilder::new(collection.to_string())
-                        .filter(qdrant_filter.clone())
-                        .exact(true),
-                )
-                .await
-        })?;
+        let count_response = client
+            .count(
+                qdrant_client::qdrant::CountPointsBuilder::new(collection.to_string())
+                    .filter(qdrant_filter.clone())
+                    .exact(true),
+            )
+            .await?;
 
         let deleted = count_response.result.map(|r| r.count).unwrap_or(0);
         if deleted == 0 {
@@ -142,15 +130,15 @@ impl VectorDbClient for QdrantClient {
                 .points(qdrant_filter)
                 .wait(true);
 
-        Self::run_async(async { client.delete_points(delete_builder).await })?;
+        client.delete_points(delete_builder).await?;
 
         Ok(deleted)
     }
 
-    fn ensure_collection(&self, name: &str, dim: usize) -> anyhow::Result<()> {
+    async fn ensure_collection(&self, name: &str, dim: usize) -> anyhow::Result<()> {
         let client = self.client()?;
 
-        let exists = Self::run_async(async { client.collection_exists(name).await })?;
+        let exists = client.collection_exists(name).await?;
 
         if !exists {
             info!(collection = name, dim = dim, "creating collection");
@@ -162,7 +150,7 @@ impl VectorDbClient for QdrantClient {
                     ..Default::default()
                 });
 
-            Self::run_async(async { client.create_collection(builder).await })?;
+            client.create_collection(builder).await?;
         }
 
         Ok(())

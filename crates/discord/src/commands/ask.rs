@@ -39,10 +39,11 @@ pub async fn ask(ctx: Context<'_>, #[description = "Prompt"] prompt: String) -> 
 
     debug!(session = %session_key.channel_id, "session key resolved");
 
+    let user_id = ctx.author().id.to_string();
     let reply = match ctx
         .data()
         .agent_runtime
-        .submit(session_key, prompt.clone())
+        .submit(session_key, Some(user_id.clone()), prompt.clone())
         .await
     {
         Ok(response) => {

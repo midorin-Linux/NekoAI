@@ -1,13 +1,13 @@
 use std::{collections::HashMap, sync::Arc};
 
-use tokio::sync::RwLock;
+use async_trait::async_trait;
 
 use super::{
     FilterCondition, SearchFilter, SearchRequest, SearchResult, UpsertRequest, VectorDbClient,
 };
 
 pub struct InMemoryVectorDb {
-    collections: Arc<RwLock<HashMap<String, Vec<Point>>>>,
+    collections: Arc<std::sync::RwLock<HashMap<String, Vec<Point>>>>,
 }
 
 struct Point {
@@ -19,7 +19,7 @@ struct Point {
 impl InMemoryVectorDb {
     pub fn new() -> Self {
         Self {
-            collections: Arc::new(RwLock::new(HashMap::new())),
+            collections: Arc::new(std::sync::RwLock::new(HashMap::new())),
         }
     }
 }
@@ -30,9 +30,10 @@ impl Default for InMemoryVectorDb {
     }
 }
 
+#[async_trait]
 impl VectorDbClient for InMemoryVectorDb {
-    fn upsert(&self, req: UpsertRequest<'_>) -> anyhow::Result<()> {
-        let mut collections = self.collections.blocking_write();
+    async fn upsert(&self, req: UpsertRequest<'_>) -> anyhow::Result<()> {
+        let mut collections = self.collections.write().unwrap();
         let points = collections.entry(req.collection.to_string()).or_default();
 
         if let Some(existing) = points.iter_mut().find(|p| p.id == req.id) {
@@ -49,8 +50,8 @@ impl VectorDbClient for InMemoryVectorDb {
         Ok(())
     }
 
-    fn search(&self, req: SearchRequest<'_>) -> anyhow::Result<Vec<SearchResult>> {
-        let collections = self.collections.blocking_read();
+    async fn search(&self, req: SearchRequest<'_>) -> anyhow::Result<Vec<SearchResult>> {
+        let collections = self.collections.read().unwrap();
         let points: Option<&Vec<Point>> = collections.get(req.collection);
         let points = match points {
             Some(p) => p,
@@ -84,16 +85,20 @@ impl VectorDbClient for InMemoryVectorDb {
         Ok(results)
     }
 
-    fn delete(&self, collection: &str, id: &str) -> anyhow::Result<()> {
-        let mut collections = self.collections.blocking_write();
+    async fn delete(&self, collection: &str, id: &str) -> anyhow::Result<()> {
+        let mut collections = self.collections.write().unwrap();
         if let Some(points) = collections.get_mut(collection) {
             points.retain(|p| p.id != id);
         }
         Ok(())
     }
 
-    fn delete_by_filter(&self, collection: &str, filter: SearchFilter) -> anyhow::Result<u64> {
-        let mut collections = self.collections.blocking_write();
+    async fn delete_by_filter(
+        &self,
+        collection: &str,
+        filter: SearchFilter,
+    ) -> anyhow::Result<u64> {
+        let mut collections = self.collections.write().unwrap();
 
         let Some(points) = collections.get_mut(collection) else {
             return Ok(0);
@@ -106,8 +111,8 @@ impl VectorDbClient for InMemoryVectorDb {
         Ok(deleted)
     }
 
-    fn ensure_collection(&self, name: &str, _dim: usize) -> anyhow::Result<()> {
-        let mut collections = self.collections.blocking_write();
+    async fn ensure_collection(&self, name: &str, _dim: usize) -> anyhow::Result<()> {
+        let mut collections = self.collections.write().unwrap();
         collections.entry(name.to_string()).or_default();
         Ok(())
     }

@@ -132,9 +132,12 @@ impl StartCommand {
         let _short_term_memory = ShortTermMemory::new(10);
         let memory_store = MemoryStore::new(&config);
 
-        memory_store.initialize().inspect_err(|e| {
+        memory_store.initialize().await.inspect_err(|e| {
             error!(error = %e, "failed to initialize vector memory collections");
         })?;
+
+        // Start background cleanup job for mid-term memory retention
+        memory_store.start_cleanup_job();
 
         spinner.finish_and_clear();
 

@@ -36,19 +36,23 @@ impl MidTermMemory {
         }
     }
 
-    pub fn ensure_collection(&self, dim: usize) -> Result<()> {
-        self.db.ensure_collection(&self.collection, dim)?;
+    pub fn retention_days(&self) -> u32 {
+        self.retention_days
+    }
+
+    pub async fn ensure_collection(&self, dim: usize) -> Result<()> {
+        self.db.ensure_collection(&self.collection, dim).await?;
         info!(collection = %self.collection, retention_days = self.retention_days, "mid-term memory initialized");
         Ok(())
     }
 
-    pub fn store_summary(
+    pub async fn store_summary(
         &self,
         session_key: &SessionKey,
         messages: &[ShortTermEntry],
         summary: String,
     ) -> Result<()> {
-        let embedding = self.embedder.embed(&summary);
+        let embedding = self.embedder.embed(&summary).await;
         let id = Uuid::new_v4().to_string();
         let now = Utc::now().timestamp();
 
@@ -69,33 +73,38 @@ impl MidTermMemory {
         payload.insert("created_at".to_string(), json!(now));
         payload.insert("message_count".to_string(), json!(messages.len()));
 
-        self.db.upsert(crate::vector_db::UpsertRequest {
-            collection: &self.collection,
-            id: &id,
-            vector: embedding,
-            payload,
-        })?;
+        self.db
+            .upsert(crate::vector_db::UpsertRequest {
+                collection: &self.collection,
+                id: &id,
+                vector: embedding,
+                payload,
+            })
+            .await?;
 
         debug!(id = %id, session = %session_key.channel_id, "stored mid-term summary");
         Ok(())
     }
 
-    pub fn search(
+    pub async fn search(
         &self,
         session_key: &SessionKey,
         query: &str,
         top_k: usize,
     ) -> Result<Vec<MemoryEntry>> {
-        let embedding = self.embedder.embed(query);
+        let embedding = self.embedder.embed(query).await;
 
         let filter = session_scope_filter(session_key);
 
-        let results = self.db.search(crate::vector_db::SearchRequest {
-            collection: &self.collection,
-            vector: embedding,
-            filter: Some(filter),
-            top_k,
-        })?;
+        let results = self
+            .db
+            .search(crate::vector_db::SearchRequest {
+                collection: &self.collection,
+                vector: embedding,
+                filter: Some(filter),
+                top_k,
+            })
+            .await?;
 
         let entries = results
             .into_iter()
@@ -125,7 +134,7 @@ impl MidTermMemory {
         Ok(entries)
     }
 
-    pub fn delete_old_entries(&self) -> Result<u64> {
+    pub async fn delete_old_entries(&self) -> Result<u64> {
         let cutoff = Utc::now().timestamp() - (self.retention_days as i64 * 24 * 60 * 60);
         let filter = SearchFilter {
             must: vec![FilterCondition::Range {
@@ -136,7 +145,7 @@ impl MidTermMemory {
             should: vec![],
         };
 
-        let deleted = self.db.delete_by_filter(&self.collection, filter)?;
+        let deleted = self.db.delete_by_filter(&self.collection, filter).await?;
 
         if deleted > 0 {
             debug!(deleted = deleted, "cleaned up old mid-term entries");

@@ -1,8 +1,10 @@
+use async_trait::async_trait;
 use rig::{client::EmbeddingsClient as _, embeddings::EmbeddingModel as _, providers::openai};
 use tracing::warn;
 
+#[async_trait]
 pub trait Embedder: Send + Sync {
-    fn embed(&self, text: &str) -> Vec<f32>;
+    async fn embed(&self, text: &str) -> Vec<f32>;
     fn dimension(&self) -> usize;
 }
 
@@ -32,27 +34,12 @@ impl OpenAICompatibleEmbedder {
             fallback: MockEmbedder::new(dim),
         })
     }
-
-    fn run_async<T, E>(future: impl Future<Output = Result<T, E>>) -> anyhow::Result<T>
-    where
-        E: std::error::Error + Send + Sync + 'static,
-    {
-        let result = if tokio::runtime::Handle::try_current().is_ok() {
-            tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(future))
-        } else {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()?;
-            rt.block_on(future)
-        };
-
-        result.map_err(Into::into)
-    }
 }
 
+#[async_trait]
 impl Embedder for OpenAICompatibleEmbedder {
-    fn embed(&self, text: &str) -> Vec<f32> {
-        match Self::run_async(self.model.embed_text(text)) {
+    async fn embed(&self, text: &str) -> Vec<f32> {
+        match self.model.embed_text(text).await {
             Ok(embedding) => embedding
                 .vec
                 .into_iter()
@@ -60,7 +47,7 @@ impl Embedder for OpenAICompatibleEmbedder {
                 .collect(),
             Err(error) => {
                 warn!(error = %error, "failed to embed text, falling back to mock embedder");
-                self.fallback.embed(text)
+                self.fallback.embed(text).await
             }
         }
     }
@@ -80,8 +67,9 @@ impl MockEmbedder {
     }
 }
 
+#[async_trait]
 impl Embedder for MockEmbedder {
-    fn embed(&self, text: &str) -> Vec<f32> {
+    async fn embed(&self, text: &str) -> Vec<f32> {
         let mut rng = RandSimple(stable_seed(text));
         (0 .. self.dim)
             .map(|_| rng.next_f32() * 2.0 - 1.0)

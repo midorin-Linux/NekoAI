@@ -158,6 +158,7 @@ impl AgentRuntime {
     pub async fn submit(
         &self,
         session_key: SessionKey,
+        user_id: Option<String>,
         user_input: String,
     ) -> Result<AgentResponse> {
         info!(
@@ -174,7 +175,7 @@ impl AgentRuntime {
         };
         debug!(turn_count = session.turns.len(), "session loaded");
 
-        let recalled = self.memory_store.recall(&session_key, &user_input);
+        let recalled = self.memory_store.recall(&session_key, &user_input).await;
 
         let context = self
             .context_manager
@@ -230,7 +231,7 @@ impl AgentRuntime {
         }
         debug!("session history updated");
 
-        self.spawn_long_term_extraction(session_key.clone(), result.clone());
+        self.spawn_long_term_extraction(session_key.clone(), user_id, result.clone());
 
         Ok(AgentResponse { content: result })
     }
@@ -253,6 +254,7 @@ impl AgentRuntime {
         let summary = self.generate_mid_term_summary(&messages).await?;
         self.memory_store
             .promote_to_mid_term(session_key, summary)
+            .await
             .context("failed to store summary in mid-term memory")?;
 
         info!(
@@ -284,7 +286,12 @@ impl AgentRuntime {
         Ok(summary.trim().to_string())
     }
 
-    fn spawn_long_term_extraction(&self, session_key: SessionKey, response: String) {
+    fn spawn_long_term_extraction(
+        &self,
+        session_key: SessionKey,
+        user_id: Option<String>,
+        response: String,
+    ) {
         let provider = self.provider.clone();
         let memory_store = self.memory_store.clone();
         let model = self.agent_model_name.clone();
@@ -297,6 +304,7 @@ impl AgentRuntime {
                 model,
                 parameters,
                 session_key,
+                user_id,
                 response,
             )
             .await
@@ -334,6 +342,7 @@ async fn extract_and_store_long_term_facts(
     model: String,
     parameters: Parameters,
     session_key: SessionKey,
+    user_id: Option<String>,
     response: String,
 ) -> Result<()> {
     let extractor = provider.build_agent(model.as_str(), parameters).build();
@@ -355,7 +364,8 @@ async fn extract_and_store_long_term_facts(
 
     let fact_count = facts.len();
     memory_store
-        .extract_long_term(&session_key, facts)
+        .extract_long_term(&session_key, user_id.as_deref(), facts)
+        .await
         .context("failed to store extracted long-term facts")?;
 
     info!(

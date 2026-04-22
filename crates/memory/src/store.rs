@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use nekoai_config::loader::Config as AppConfig;
 use nekoai_domain::agent::session::SessionKey;
 use serde_json::Value;
+use tokio::time::{Duration, interval};
 use tracing::{debug, info, warn};
 
 use crate::{
@@ -127,10 +128,10 @@ impl MemoryStore {
         }
     }
 
-    pub fn initialize(&self) -> anyhow::Result<()> {
+    pub async fn initialize(&self) -> anyhow::Result<()> {
         let dim = self.embedder.dimension();
-        self.mid_term.ensure_collection(dim)?;
-        self.long_term.ensure_collection(dim)?;
+        self.mid_term.ensure_collection(dim).await?;
+        self.long_term.ensure_collection(dim).await?;
         Ok(())
     }
 
@@ -145,14 +146,16 @@ impl MemoryStore {
             .push_turn(session_key, user, assistant);
     }
 
-    pub fn recall(&self, session_key: &SessionKey, query: &str) -> RecalledMemory {
+    pub async fn recall(&self, session_key: &SessionKey, query: &str) -> RecalledMemory {
         let mid_term = self
             .mid_term
             .search(session_key, query, self.mid_term_top_k)
+            .await
             .unwrap_or_default();
         let long_term = self
             .long_term
             .search(session_key, query, self.long_term_top_k)
+            .await
             .unwrap_or_default();
 
         debug!(
@@ -172,7 +175,7 @@ impl MemoryStore {
         self.short_term_memory.get_count(session_key) >= self.short_term_memory.max_entry
     }
 
-    pub fn promote_to_mid_term(
+    pub async fn promote_to_mid_term(
         &self,
         session_key: &SessionKey,
         summary: String,
@@ -180,7 +183,8 @@ impl MemoryStore {
         let messages = self.short_term_memory.get_messages(session_key);
 
         self.mid_term
-            .store_summary(session_key, &messages, summary)?;
+            .store_summary(session_key, &messages, summary)
+            .await?;
 
         self.short_term_memory.clear(session_key);
 
@@ -188,14 +192,17 @@ impl MemoryStore {
         Ok(())
     }
 
-    pub fn extract_long_term(
+    pub async fn extract_long_term(
         &self,
         session_key: &SessionKey,
+        user_id: Option<&str>,
         facts: Vec<(String, Vec<String>)>,
     ) -> anyhow::Result<()> {
         let fact_count = facts.len();
         for (fact, tags) in facts {
-            self.long_term.store(session_key, fact, tags)?;
+            self.long_term
+                .store(session_key, user_id, fact, tags)
+                .await?;
         }
 
         debug!(session = %session_key.channel_id, fact_count = fact_count, "extracted long-term facts");
@@ -209,5 +216,37 @@ impl MemoryStore {
     pub fn clear_short_term(&self, session_key: &SessionKey) {
         self.short_term_memory.clear(session_key);
         debug!(session = %session_key.channel_id, "cleared short-term memory");
+    }
+
+    /// Start a background cleanup job for mid-term memory retention.
+    /// This runs periodically and deletes entries older than retention_days.
+    pub fn start_cleanup_job(&self) {
+        let mid_term = self.mid_term.clone();
+        let retention_days = self.mid_term.retention_days();
+
+        tokio::spawn(async move {
+            let mut interval = interval(Duration::from_secs(24 * 60 * 60)); // Run daily
+
+            loop {
+                interval.tick().await;
+                debug!(
+                    retention_days = retention_days,
+                    "running mid-term cleanup job"
+                );
+
+                match mid_term.delete_old_entries().await {
+                    Ok(deleted) => {
+                        if deleted > 0 {
+                            info!(deleted = deleted, "cleaned up old mid-term entries");
+                        }
+                    }
+                    Err(e) => {
+                        warn!(error = %e, "failed to run mid-term cleanup job");
+                    }
+                }
+            }
+        });
+
+        info!("started mid-term cleanup job (runs daily)");
     }
 }
