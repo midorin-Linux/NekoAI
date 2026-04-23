@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use nekoai_config::loader::{Config, Parameters};
@@ -9,6 +9,7 @@ use nekoai_memory::{
 };
 use rig::completion::Prompt;
 use serde::Deserialize;
+use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
 
 use crate::{
@@ -140,18 +141,12 @@ impl AgentRuntime {
 
         self.memory_store.clear_short_term(session_key);
 
-        let mut session_manager = self
-            .session_manager
-            .lock()
-            .expect("session manager mutex poisoned");
+        let mut session_manager = self.session_manager.lock().await;
         session_manager.clear(session_key)
     }
 
-    pub fn get_history(&self, session_key: &SessionKey) -> Result<Session> {
-        let mut session_manager = self
-            .session_manager
-            .lock()
-            .expect("session manager mutex poisoned");
+    pub async fn get_history(&self, session_key: &SessionKey) -> Result<Session> {
+        let mut session_manager = self.session_manager.lock().await;
         session_manager.get(session_key).map(|s| s.clone())
     }
 
@@ -167,10 +162,7 @@ impl AgentRuntime {
             "submitting user input"
         );
         let session = {
-            let mut session_manager = self
-                .session_manager
-                .lock()
-                .expect("session manager mutex poisoned");
+            let mut session_manager = self.session_manager.lock().await;
             session_manager.get_or_create(&session_key).clone()
         };
         debug!(turn_count = session.turns.len(), "session loaded");
@@ -223,10 +215,7 @@ impl AgentRuntime {
         }
 
         {
-            let mut session_manager = self
-                .session_manager
-                .lock()
-                .expect("session manager mutex poisoned");
+            let mut session_manager = self.session_manager.lock().await;
             session_manager.append(&session_key, &user_input, result.as_str());
         }
         debug!("session history updated");

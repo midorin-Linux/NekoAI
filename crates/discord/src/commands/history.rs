@@ -32,7 +32,7 @@ pub async fn history(ctx: Context<'_>) -> anyhow::Result<()> {
 
     debug!(session = %session_key.channel_id, "session key resolved");
 
-    match ctx.data().agent_runtime.get_history(&session_key) {
+    match ctx.data().agent_runtime.get_history(&session_key).await {
         Ok(history) => {
             info!(
                 target_session = session_key.channel_id.to_string(),
