@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+use tokio::sync::Mutex;
 use tracing::{debug, info};
 
 use super::{
@@ -8,32 +9,42 @@ use super::{
 };
 
 pub struct QdrantClient {
+    #[allow(dead_code)]
     url: String,
+    #[allow(dead_code)]
     api_key: Option<String>,
+    client: Mutex<qdrant_client::Qdrant>,
 }
 
 impl QdrantClient {
-    pub fn new(url: String, api_key: Option<String>) -> Self {
+    pub fn new(url: String, api_key: Option<String>) -> anyhow::Result<Self> {
         info!("qdrant client configured for {}", url);
-        Self { url, api_key }
-    }
 
-    fn client(&self) -> anyhow::Result<qdrant_client::Qdrant> {
-        let builder = qdrant_client::Qdrant::from_url(&self.url);
-        let builder = if let Some(api_key) = self.api_key.as_deref() {
+        let builder = qdrant_client::Qdrant::from_url(&url);
+        let builder = if let Some(api_key) = api_key.as_deref() {
             builder.api_key(api_key)
         } else {
             builder
         };
 
-        Ok(builder.build()?)
+        let client = builder.build()?;
+
+        Ok(Self {
+            url,
+            api_key,
+            client: Mutex::new(client),
+        })
+    }
+
+    async fn client(&self) -> tokio::sync::MutexGuard<'_, qdrant_client::Qdrant> {
+        self.client.lock().await
     }
 }
 
 #[async_trait]
 impl VectorDbClient for QdrantClient {
     async fn upsert(&self, req: UpsertRequest<'_>) -> anyhow::Result<()> {
-        let client = self.client()?;
+        let client = self.client().await;
 
         let vector = qdrant_client::qdrant::Vector::from(req.vector);
         let point_id = req.id.to_string();
@@ -57,7 +68,7 @@ impl VectorDbClient for QdrantClient {
     }
 
     async fn search(&self, req: SearchRequest<'_>) -> anyhow::Result<Vec<SearchResult>> {
-        let client = self.client()?;
+        let client = self.client().await;
 
         let filter = req.filter.as_ref().map(build_filter);
 
@@ -93,7 +104,7 @@ impl VectorDbClient for QdrantClient {
     }
 
     async fn delete(&self, collection: &str, id: &str) -> anyhow::Result<()> {
-        let client = self.client()?;
+        let client = self.client().await;
 
         let builder = qdrant_client::qdrant::DeletePointsBuilder::new(collection.to_string());
         let builder = builder.points(vec![point_id_from_str(id)]).wait(true);
@@ -109,7 +120,7 @@ impl VectorDbClient for QdrantClient {
         collection: &str,
         filter: SearchFilter,
     ) -> anyhow::Result<u64> {
-        let client = self.client()?;
+        let client = self.client().await;
         let qdrant_filter = build_filter(&filter);
 
         let count_response = client
@@ -136,7 +147,7 @@ impl VectorDbClient for QdrantClient {
     }
 
     async fn ensure_collection(&self, name: &str, dim: usize) -> anyhow::Result<()> {
-        let client = self.client()?;
+        let client = self.client().await;
 
         let exists = client.collection_exists(name).await?;
 

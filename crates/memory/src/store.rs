@@ -40,16 +40,19 @@ pub struct MemoryEntry {
 impl MemoryStore {
     pub fn new(config: &AppConfig) -> Self {
         let short_term_memory = ShortTermMemory::new(config.memory.short_term_max_entries);
-        let vector_db = Arc::new(crate::vector_db::qdrant::QdrantClient::new(
-            config.memory.vector_db.url.clone(),
-            config.memory.vector_db.api_key.as_ref().and_then(|value| {
-                if value.is_empty() {
-                    None
-                } else {
-                    Some(value.clone())
-                }
-            }),
-        ));
+        let vector_db = Arc::new(
+            crate::vector_db::qdrant::QdrantClient::new(
+                config.memory.vector_db.url.clone(),
+                config.memory.vector_db.api_key.as_ref().and_then(|value| {
+                    if value.is_empty() {
+                        None
+                    } else {
+                        Some(value.clone())
+                    }
+                }),
+            )
+            .expect("failed to create Qdrant client"),
+        );
         let embedding_dim = config.provider.embedding_model.dimension as usize;
         let embedder: Arc<dyn Embedder> = match crate::embedding::OpenAICompatibleEmbedder::new(
             &config.provider.embedding_model.provider_base_url,
