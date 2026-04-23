@@ -69,7 +69,7 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --locked --verbose
 
-security:
+  security:
     name: security checks
     runs-on: ubuntu-latest
     steps:
