@@ -71,9 +71,7 @@ impl MockEmbedder {
 impl Embedder for MockEmbedder {
     async fn embed(&self, text: &str) -> Vec<f32> {
         let mut rng = RandSimple(stable_seed(text));
-        (0 .. self.dim)
-            .map(|_| rng.next_f32() * 2.0 - 1.0)
-            .collect()
+        (0..self.dim).map(|_| rng.next_f32() * 2.0 - 1.0).collect()
     }
 
     fn dimension(&self) -> usize {

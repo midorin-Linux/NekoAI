@@ -377,7 +377,7 @@ fn parse_extracted_facts(raw: &str) -> Vec<(String, Vec<String>)> {
                 return None;
             }
 
-            parse_extracted_facts_json(&trimmed[start ..= end])
+            parse_extracted_facts_json(&trimmed[start..=end])
         })
         .unwrap_or_default()
 }
