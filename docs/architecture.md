@@ -162,7 +162,15 @@ discord-agent/
 │
 └── docs/
     ├── architecture.md         # 本ドキュメント
-    └── tools.md
+    └── workflow/
+        ├── agent.md
+        ├── cli.md
+        ├── config.md
+        ├── discord.md
+        ├── domain.md
+        ├── infra.md
+        ├── memory.md
+        └── tools.md
 ```
 
 ---
