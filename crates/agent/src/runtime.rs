@@ -7,7 +7,7 @@ use nekoai_memory::{
     short_term::{Role, ShortTermEntry},
     store::MemoryStore,
 };
-use rig::completion::Prompt;
+use rig::completion::{Chat, Message, Prompt};
 use serde::Deserialize;
 use tokio::sync::Mutex;
 use tracing::{debug, info, warn};
@@ -181,21 +181,24 @@ impl AgentRuntime {
                 self.agent_model_name.as_str(),
                 self.agent_parameters.clone(),
             )
+            .preamble(context.system_prompt.as_str())
             .build();
 
-        let mut prompt_text = String::new();
-        prompt_text.push_str(&format!("System: {}\n\n", context.system_prompt));
+        let mut chat_history = Vec::with_capacity(context.turns.len() * 2);
         for turn in &context.turns {
-            prompt_text.push_str(&format!(
-                "User: {}\nAssistant: {}\n",
-                turn.user, turn.assistant
-            ));
+            chat_history.push(Message::user(&turn.user));
+            chat_history.push(Message::assistant(&turn.assistant));
         }
-        prompt_text.push_str(&format!("User: {}", context.user_message));
 
-        debug!(prompt_len = prompt_text.len(), "prompt composed");
+        debug!(
+            chat_history_message_count = chat_history.len(),
+            context_turn_count = context.turns.len(),
+            "prompt composed"
+        );
 
-        let result = agent.prompt(prompt_text).await?;
+        let result = agent
+            .chat(context.user_message.as_str(), chat_history)
+            .await?;
         info!(response_len = result.len(), "received model response");
 
         self.memory_store
@@ -377,7 +380,7 @@ fn parse_extracted_facts(raw: &str) -> Vec<(String, Vec<String>)> {
                 return None;
             }
 
-            parse_extracted_facts_json(&trimmed[start..=end])
+            parse_extracted_facts_json(&trimmed[start ..= end])
         })
         .unwrap_or_default()
 }
