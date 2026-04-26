@@ -39,10 +39,11 @@ impl QdrantClient {
 #[async_trait]
 impl VectorDbClient for QdrantClient {
     async fn upsert(&self, req: UpsertRequest<'_>) -> anyhow::Result<()> {
-        let vector = qdrant_client::qdrant::Vector::from(req.vector);
+        let collection = req.collection.to_string();
         let point_id = req.id.to_string();
+        let vector = qdrant_client::qdrant::Vector::from(req.vector);
 
-        let payload: qdrant_client::Payload = req.payload.clone().into();
+        let payload: qdrant_client::Payload = req.payload.into();
         let payload_map: HashMap<String, qdrant_client::qdrant::Value> = payload.into();
 
         let points = vec![qdrant_client::qdrant::PointStruct {
@@ -51,8 +52,7 @@ impl VectorDbClient for QdrantClient {
             payload: payload_map,
         }];
 
-        let builder =
-            qdrant_client::qdrant::UpsertPointsBuilder::new(req.collection.to_string(), points);
+        let builder = qdrant_client::qdrant::UpsertPointsBuilder::new(collection, points);
 
         self.client.upsert_points(builder).await?;
 
@@ -65,7 +65,7 @@ impl VectorDbClient for QdrantClient {
 
         let mut builder = qdrant_client::qdrant::SearchPointsBuilder::new(
             req.collection.to_string(),
-            req.vector.clone(),
+            req.vector,
             req.top_k as u64,
         );
 

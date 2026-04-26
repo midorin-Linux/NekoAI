@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::{
     embedding::Embedder,
     store::MemoryEntry,
-    vector_db::{FilterCondition, SearchFilter, VectorDbClient},
+    vector_db::{FilterCondition, SearchFilter, SearchResult, VectorDbClient},
 };
 
 pub struct LongTermMemory {
@@ -49,7 +49,7 @@ impl LongTermMemory {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now().timestamp();
 
-        let mut payload = HashMap::new();
+        let mut payload = HashMap::with_capacity(7);
         payload.insert("content".to_string(), json!(fact));
         payload.insert(
             "guild_id".to_string(),
@@ -90,8 +90,6 @@ impl LongTermMemory {
         query: &str,
         top_k: usize,
     ) -> Result<Vec<MemoryEntry>> {
-        let embedding = self.embedder.embed(query).await;
-
         let filter = SearchFilter {
             must: vec![FilterCondition::Match {
                 key: "guild_id".to_string(),
@@ -100,42 +98,7 @@ impl LongTermMemory {
             should: vec![],
         };
 
-        let results = self
-            .db
-            .search(crate::vector_db::SearchRequest {
-                collection: &self.collection,
-                vector: embedding,
-                filter: Some(filter),
-                top_k,
-            })
-            .await?;
-
-        let entries = results
-            .into_iter()
-            .map(|r| {
-                let content = r
-                    .payload
-                    .get("content")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                let created_at = r
-                    .payload
-                    .get("created_at")
-                    .and_then(|v| v.as_i64())
-                    .map(|ts| DateTime::from_timestamp(ts, 0).unwrap_or_default())
-                    .unwrap_or_default();
-
-                MemoryEntry {
-                    content,
-                    score: r.score,
-                    created_at,
-                    metadata: r.payload,
-                }
-            })
-            .collect();
-
-        Ok(entries)
+        self.search_with_filter(query, filter, top_k).await
     }
 
     /// Search long-term memories by user_id (for user-specific facts)
@@ -145,8 +108,6 @@ impl LongTermMemory {
         query: &str,
         top_k: usize,
     ) -> Result<Vec<MemoryEntry>> {
-        let embedding = self.embedder.embed(query).await;
-
         let filter = SearchFilter {
             must: vec![FilterCondition::Match {
                 key: "user_id".to_string(),
@@ -155,42 +116,7 @@ impl LongTermMemory {
             should: vec![],
         };
 
-        let results = self
-            .db
-            .search(crate::vector_db::SearchRequest {
-                collection: &self.collection,
-                vector: embedding,
-                filter: Some(filter),
-                top_k,
-            })
-            .await?;
-
-        let entries = results
-            .into_iter()
-            .map(|r| {
-                let content = r
-                    .payload
-                    .get("content")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                let created_at = r
-                    .payload
-                    .get("created_at")
-                    .and_then(|v| v.as_i64())
-                    .map(|ts| DateTime::from_timestamp(ts, 0).unwrap_or_default())
-                    .unwrap_or_default();
-
-                MemoryEntry {
-                    content,
-                    score: r.score,
-                    created_at,
-                    metadata: r.payload,
-                }
-            })
-            .collect();
-
-        Ok(entries)
+        self.search_with_filter(query, filter, top_k).await
     }
 
     pub async fn search(
@@ -199,9 +125,17 @@ impl LongTermMemory {
         query: &str,
         top_k: usize,
     ) -> Result<Vec<MemoryEntry>> {
-        let embedding = self.embedder.embed(query).await;
-
         let filter = session_scope_filter(session_key);
+        self.search_with_filter(query, filter, top_k).await
+    }
+
+    async fn search_with_filter(
+        &self,
+        query: &str,
+        filter: SearchFilter,
+        top_k: usize,
+    ) -> Result<Vec<MemoryEntry>> {
+        let embedding = self.embedder.embed(query).await;
 
         let results = self
             .db
@@ -213,32 +147,7 @@ impl LongTermMemory {
             })
             .await?;
 
-        let entries = results
-            .into_iter()
-            .map(|r| {
-                let content = r
-                    .payload
-                    .get("content")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                let created_at = r
-                    .payload
-                    .get("created_at")
-                    .and_then(|v| v.as_i64())
-                    .map(|ts| DateTime::from_timestamp(ts, 0).unwrap_or_default())
-                    .unwrap_or_default();
-
-                MemoryEntry {
-                    content,
-                    score: r.score,
-                    created_at,
-                    metadata: r.payload,
-                }
-            })
-            .collect();
-
-        Ok(entries)
+        Ok(results.into_iter().map(search_result_to_entry).collect())
     }
 
     pub async fn delete(&self, id: &str) -> Result<()> {
@@ -270,6 +179,28 @@ impl LongTermMemory {
     }
 }
 
+pub(crate) fn search_result_to_entry(r: SearchResult) -> MemoryEntry {
+    let content = r
+        .payload
+        .get("content")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let created_at = r
+        .payload
+        .get("created_at")
+        .and_then(|v| v.as_i64())
+        .and_then(|ts| DateTime::from_timestamp(ts, 0))
+        .unwrap_or_default();
+
+    MemoryEntry {
+        content,
+        score: r.score,
+        created_at,
+        metadata: r.payload,
+    }
+}
+
 fn session_scope_filter(session_key: &SessionKey) -> SearchFilter {
     SearchFilter {
         must: vec![
@@ -290,7 +221,7 @@ fn session_scope_filter(session_key: &SessionKey) -> SearchFilter {
     }
 }
 
-fn session_kind_value(kind: &SessionKind) -> &'static str {
+pub(crate) fn session_kind_value(kind: &SessionKind) -> &'static str {
     match kind {
         SessionKind::GuildChannel => "guild",
         SessionKind::Thread => "thread",

@@ -1,3 +1,4 @@
+
 use std::collections::VecDeque;
 
 use chrono::Utc;
@@ -38,26 +39,33 @@ impl ShortTermMemory {
             max_entry = self.max_entry,
             "storing short-term conversation turn"
         );
-        let mut query = self
+
+        let timestamp = Utc::now().timestamp();
+        let capacity = self.max_entry.max(2);
+
+        let mut queue = self
             .store
             .entry(session_key.clone())
-            .or_insert_with(VecDeque::new);
-        query.push_back(ShortTermEntry {
+            .or_insert_with(|| VecDeque::with_capacity(capacity));
+
+        queue.push_back(ShortTermEntry {
             role: Role::User,
             content: user.to_string(),
-            timestamp: Utc::now().timestamp(),
+            timestamp,
         });
-        query.push_back(ShortTermEntry {
+        queue.push_back(ShortTermEntry {
             role: Role::Assistant,
             content: assistant.to_string(),
-            timestamp: Utc::now().timestamp(),
+            timestamp,
         });
 
-        while query.len() > self.max_entry {
-            query.pop_front();
+        // Drain excess entries from the front in a single shot.
+        let len = queue.len();
+        if len > self.max_entry {
+            queue.drain(..len - self.max_entry);
         }
 
-        debug!(session = %session_key.channel_id, entry_count = query.len(), "short-term memory updated");
+        debug!(session = %session_key.channel_id, entry_count = queue.len(), "short-term memory updated");
     }
 
     pub fn get_count(&self, session_key: &SessionKey) -> usize {

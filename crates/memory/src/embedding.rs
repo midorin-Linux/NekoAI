@@ -40,11 +40,11 @@ impl OpenAICompatibleEmbedder {
 impl Embedder for OpenAICompatibleEmbedder {
     async fn embed(&self, text: &str) -> Vec<f32> {
         match self.model.embed_text(text).await {
-            Ok(embedding) => embedding
-                .vec
-                .into_iter()
-                .map(|value| value as f32)
-                .collect(),
+            Ok(embedding) => {
+                let mut out = Vec::with_capacity(embedding.vec.len());
+                out.extend(embedding.vec.into_iter().map(|value| value as f32));
+                out
+            }
             Err(error) => {
                 warn!(error = %error, "failed to embed text, falling back to mock embedder");
                 self.fallback.embed(text).await
@@ -71,9 +71,11 @@ impl MockEmbedder {
 impl Embedder for MockEmbedder {
     async fn embed(&self, text: &str) -> Vec<f32> {
         let mut rng = RandSimple(stable_seed(text));
-        (0 .. self.dim)
-            .map(|_| rng.next_f32() * 2.0 - 1.0)
-            .collect()
+        let mut out = Vec::with_capacity(self.dim);
+        for _ in 0..self.dim {
+            out.push(rng.next_f32() * 2.0 - 1.0);
+        }
+        out
     }
 
     fn dimension(&self) -> usize {

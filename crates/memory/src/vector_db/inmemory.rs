@@ -14,7 +14,20 @@ pub struct InMemoryVectorDb {
 struct Point {
     id: String,
     vector: Vec<f32>,
+    norm: f32,
     payload: HashMap<String, serde_json::Value>,
+}
+
+impl Point {
+    fn new(id: String, vector: Vec<f32>, payload: HashMap<String, serde_json::Value>) -> Self {
+        let norm = vector_norm(&vector);
+        Self {
+            id,
+            vector,
+            norm,
+            payload,
+        }
+    }
 }
 
 impl InMemoryVectorDb {
@@ -37,14 +50,24 @@ impl VectorDbClient for InMemoryVectorDb {
         let mut collections = self.collections.write().await;
         let points = collections.entry(req.collection.to_string()).or_default();
 
-        if let Some(existing) = points.iter_mut().find(|p| p.id == req.id) {
-            existing.vector = req.vector.clone();
-            existing.payload = req.payload.clone();
+        let UpsertRequest {
+            id,
+            vector,
+            payload,
+            ..
+        } = req;
+        let norm = vector_norm(&vector);
+
+        if let Some(existing) = points.iter_mut().find(|p| p.id == id) {
+            existing.vector = vector;
+            existing.norm = norm;
+            existing.payload = payload;
         } else {
             points.push(Point {
-                id: req.id.to_string(),
-                vector: req.vector.clone(),
-                payload: req.payload.clone(),
+                id: id.to_string(),
+                vector,
+                norm,
+                payload,
             });
         }
 
@@ -53,21 +76,21 @@ impl VectorDbClient for InMemoryVectorDb {
 
     async fn search(&self, req: SearchRequest<'_>) -> anyhow::Result<Vec<SearchResult>> {
         let collections = self.collections.read().await;
-        let points: Option<&Vec<Point>> = collections.get(req.collection);
-        let points = match points {
-            Some(p) => p,
-            None => return Ok(Vec::new()),
+        let Some(points) = collections.get(req.collection) else {
+            return Ok(Vec::new());
         };
 
+        let query_norm = vector_norm(&req.vector);
+        if query_norm == 0.0 {
+            return Ok(Vec::new());
+        }
+
+        let filter_ref = req.filter.as_ref();
         let mut results: Vec<SearchResult> = points
             .iter()
-            .filter(|p| {
-                req.filter
-                    .as_ref()
-                    .is_none_or(|filter| matches_filter(&p.payload, filter))
-            })
+            .filter(|p| filter_ref.is_none_or(|filter| matches_filter(&p.payload, filter)))
             .map(|p| {
-                let score = cosine_similarity(&req.vector, &p.vector);
+                let score = cosine_similarity_with_norms(&req.vector, query_norm, &p.vector, p.norm);
                 SearchResult {
                     id: p.id.clone(),
                     score,
@@ -76,7 +99,7 @@ impl VectorDbClient for InMemoryVectorDb {
             })
             .collect();
 
-        results.sort_by(|a, b| {
+        results.sort_unstable_by(|a, b| {
             b.score
                 .partial_cmp(&a.score)
                 .unwrap_or(std::cmp::Ordering::Equal)
@@ -125,13 +148,15 @@ fn matches_filter(payload: &HashMap<String, serde_json::Value>, filter: &SearchF
         .iter()
         .all(|condition| matches_condition(payload, condition));
 
-    let should_ok = filter.should.is_empty()
-        || filter
-            .should
-            .iter()
-            .any(|condition| matches_condition(payload, condition));
+    if !must_ok {
+        return false;
+    }
 
-    must_ok && should_ok
+    filter.should.is_empty()
+        || filter
+        .should
+        .iter()
+        .any(|condition| matches_condition(payload, condition))
 }
 
 fn matches_condition(
@@ -188,18 +213,20 @@ fn value_as_f64(value: &serde_json::Value) -> Option<f64> {
         .or_else(|| value.as_u64().map(|v| v as f64))
 }
 
-fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    if a.len() != b.len() || a.is_empty() {
+fn vector_norm(v: &[f32]) -> f32 {
+    v.iter().map(|x| x * x).sum::<f32>().sqrt()
+}
+
+fn cosine_similarity_with_norms(a: &[f32], norm_a: f32, b: &[f32], norm_b: f32) -> f32 {
+    if a.len() != b.len() || a.is_empty() || norm_a == 0.0 || norm_b == 0.0 {
         return 0.0;
     }
 
     let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
-    let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-
-    if norm_a == 0.0 || norm_b == 0.0 {
-        return 0.0;
-    }
-
     dot / (norm_a * norm_b)
+}
+
+#[allow(dead_code)]
+fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+    cosine_similarity_with_norms(a, vector_norm(a), b, vector_norm(b))
 }

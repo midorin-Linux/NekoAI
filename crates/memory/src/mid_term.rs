@@ -1,14 +1,15 @@
 use std::{collections::HashMap, sync::Arc};
 
 use anyhow::Result;
-use chrono::{DateTime, Utc};
-use nekoai_domain::agent::session::{SessionKey, SessionKind};
+use chrono::Utc;
+use nekoai_domain::agent::session::SessionKey;
 use serde_json::json;
 use tracing::{debug, info};
 use uuid::Uuid;
 
 use crate::{
     embedding::Embedder,
+    long_term::{search_result_to_entry, session_kind_value},
     short_term::ShortTermEntry,
     store::MemoryEntry,
     vector_db::{FilterCondition, SearchFilter, VectorDbClient},
@@ -56,7 +57,7 @@ impl MidTermMemory {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now().timestamp();
 
-        let mut payload = HashMap::new();
+        let mut payload = HashMap::with_capacity(6);
         payload.insert("content".to_string(), json!(summary));
         payload.insert(
             "guild_id".to_string(),
@@ -106,32 +107,7 @@ impl MidTermMemory {
             })
             .await?;
 
-        let entries = results
-            .into_iter()
-            .map(|r| {
-                let content = r
-                    .payload
-                    .get("content")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                let created_at = r
-                    .payload
-                    .get("created_at")
-                    .and_then(|v| v.as_i64())
-                    .map(|ts| DateTime::from_timestamp(ts, 0).unwrap_or_default())
-                    .unwrap_or_default();
-
-                MemoryEntry {
-                    content,
-                    score: r.score,
-                    created_at,
-                    metadata: r.payload,
-                }
-            })
-            .collect();
-
-        Ok(entries)
+        Ok(results.into_iter().map(search_result_to_entry).collect())
     }
 
     pub async fn delete_old_entries(&self) -> Result<u64> {
@@ -172,13 +148,5 @@ fn session_scope_filter(session_key: &SessionKey) -> SearchFilter {
             },
         ],
         should: vec![],
-    }
-}
-
-fn session_kind_value(kind: &SessionKind) -> &'static str {
-    match kind {
-        SessionKind::GuildChannel => "guild",
-        SessionKind::Thread => "thread",
-        SessionKind::DirectMessage => "dm",
     }
 }
