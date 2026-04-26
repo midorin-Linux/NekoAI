@@ -1,10 +1,12 @@
 mod chat;
 pub mod commands;
 
+use anyhow::{Result, bail};
 use clap::Command;
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use nekoai_agent::runtime::{AgentRuntime, RuntimeInitProgress};
+use std::process::ExitCode;
 use tracing::{error, info, warn};
 
 fn cli() -> Command {
@@ -17,19 +19,23 @@ fn cli() -> Command {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> ExitCode {
+    match run().await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            error!(error = %err, "application terminated with error");
+            eprintln!("Error: {:#}", err);
+            ExitCode::FAILURE
+        }
+    }
+}
+
+async fn run() -> Result<()> {
     let matches = cli().get_matches();
 
     match matches.subcommand() {
         Some(("start", _sub_matches)) => {
-            let start_command = match commands::start::StartCommand::new().await {
-                Ok(start_command) => start_command,
-                Err(err) => {
-                    error!(error = %err, "failed to initialize start command");
-                    eprintln!("Error: {:#}", err);
-                    std::process::exit(1);
-                }
-            };
+            let start_command = commands::start::StartCommand::new().await?;
 
             info!("start command initialized");
 
@@ -57,13 +63,12 @@ async fn main() {
                 Ok(runtime) => runtime,
                 Err(err) => {
                     agent_init_bar.finish_and_clear();
-                    error!(error = %err, "failed to initialize agent runtime");
                     println!(
                         "    {} Failed to initialize agent runtime: {}",
                         "✗".red(),
                         err
                     );
-                    std::process::exit(1);
+                    return Err(err.into());
                 }
             };
 
@@ -72,34 +77,22 @@ async fn main() {
 
             info!("agent runtime initialized");
 
-            let chat_client =
-                match chat::ChatClient::initialize(&start_command.config, runtime).await {
-                    Ok(client) => client,
-                    Err(err) => {
-                        error!(error = %err, "failed to initialize chat client");
-                        eprintln!("Error: {:#}", err);
-                        std::process::exit(1);
-                    }
-                };
+            let chat_client = chat::ChatClient::initialize(&start_command.config, runtime).await?;
 
             info!(
                 platform = chat_client.platform_name(),
                 "chat client initialized"
             );
 
-            if let Err(err) = chat_client.run().await {
-                error!(error = %err, "application terminated with error");
-                eprintln!("Error: {:#}", err);
-                std::process::exit(1);
-            }
+            chat_client.run().await?;
 
             info!("application exited successfully");
-            std::process::exit(0);
+            Ok(())
         }
         _ => {
             warn!("no command specified");
             println!("Please specify a command. Use --help for more information.");
-            std::process::exit(1);
+            bail!("no command specified");
         }
     }
 }

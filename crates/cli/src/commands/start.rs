@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 use colored::Colorize;
 use dialoguer::{Input, theme::SimpleTheme};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -53,7 +53,7 @@ impl StartCommand {
 
                 println!("    {} Failed to initialize tracing: {}", "✗".red(), e);
 
-                std::process::exit(1);
+                bail!("failed to initialize tracing: {e}");
             }
         };
 
@@ -95,7 +95,7 @@ impl StartCommand {
                     info!("User chose to cancel the setup wizard");
                     println!("\n    Setup wizard cancelled. Shutting down...");
 
-                    std::process::exit(1);
+                    bail!("setup wizard cancelled by user");
                 } else {
                     println!("\n    Invalid input. Please enter 'y' or 'n'.");
                 }
