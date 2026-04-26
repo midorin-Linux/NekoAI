@@ -72,37 +72,47 @@ impl StartCommand {
 
         info!("Checking for configuration file");
 
-        if let Ok(false) = std::fs::exists(".config/config.json") {
-            spinner.finish_and_clear();
+        match std::fs::exists(".config/config.json") {
+            Ok(false) => {
+                spinner.finish_and_clear();
 
-            warn!("No configuration file found at .config/config.json");
-            println!("    {} No configuration found\n", "✗".red());
-            println!(
-                "    It's likely that this is the first time the program is running, or the configuration file has been deleted."
-            );
+                warn!("No configuration file found at .config/config.json");
+                println!("    {} No configuration found\n", "✗".red());
+                println!(
+                    "    It's likely that this is the first time the program is running, or the configuration file has been deleted."
+                );
 
-            loop {
-                let response: String = Input::with_theme(&SimpleTheme)
-                    .with_prompt("    Do you want to run the setup wizard to create a new configuration? [y/n]")
-                    .interact_text()?;
+                loop {
+                    let response: String = Input::with_theme(&SimpleTheme)
+                        .with_prompt("    Do you want to run the setup wizard to create a new configuration? [y/n]")
+                        .interact_text()?;
 
-                if response.to_lowercase() == "y" {
-                    info!("User chose to run the setup wizard");
-                    println!("\n    Starting setup wizard...");
+                    let response = response.trim().to_ascii_lowercase();
 
-                    break;
-                } else if response.to_lowercase() == "n" {
-                    info!("User chose to cancel the setup wizard");
-                    println!("\n    Setup wizard cancelled. Shutting down...");
-
-                    bail!("setup wizard cancelled by user");
-                } else {
-                    println!("\n    Invalid input. Please enter 'y' or 'n'.");
+                    if response == "y" {
+                        info!("User chose to run the setup wizard");
+                        println!("\n    Starting setup wizard...");
+                        break;
+                    } else if response == "n" {
+                        info!("User chose to cancel the setup wizard");
+                        println!("\n    Setup wizard cancelled. Shutting down...");
+                        bail!("setup wizard cancelled by user");
+                    } else {
+                        println!("\n    Invalid input. Please enter 'y' or 'n'.");
+                    }
                 }
+
+                // セットアップウィザードを起動
+                info!("Running setup wizard to create new configuration");
             }
-            // セットアップウィザードを起動
-            info!("Running setup wizard to create new configuration");
-        };
+            Ok(true) => {
+                info!("Configuration file found at .config/config.json");
+            }
+            Err(e) => {
+                spinner.finish_and_clear();
+                bail!("failed to check config file existence: {e}");
+            }
+        }
 
         let config = Config::load()
             .inspect_err(|_e| {
