@@ -29,10 +29,7 @@ impl DiscordClient {
 
         let intents = GatewayIntents::GUILDS
             | GatewayIntents::GUILD_MESSAGES
-            | GatewayIntents::MESSAGE_CONTENT
-            | GatewayIntents::GUILD_MEMBERS
-            | GatewayIntents::GUILD_VOICE_STATES
-            | GatewayIntents::GUILD_PRESENCES;
+            | GatewayIntents::MESSAGE_CONTENT;
 
         // Serenity用のhttpクライアントを先に作成
         let _http = Arc::new(serenity::all::Http::new(&discord_token));
