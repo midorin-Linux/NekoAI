@@ -10,7 +10,10 @@ pub type Context<'a> = poise::Context<'a, Data, anyhow::Error>;
 
 async fn on_error(error: poise::FrameworkError<'_, Data, anyhow::Error>) {
     match error {
-        poise::FrameworkError::Setup { error, .. } => panic!("Failed to start bot: {:?}", error),
+        poise::FrameworkError::Setup { error, .. } => {
+            tracing::error!("Failed to start bot: {:?}", error);
+            panic!("Failed to start bot: {:?}", error);
+        },
         poise::FrameworkError::Command { error, ctx, .. } => {
             tracing::error!("Error in command `{}`: {:?}", ctx.command().name, error);
         }
