@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+use nekoai_domain::agent::session::{SessionKey, SessionKind};
+use serde_json::json;
 use tracing::{debug, info};
 
 use super::{
@@ -233,5 +235,33 @@ fn point_id_from_str(id: &str) -> qdrant_client::qdrant::PointId {
     match id.parse::<u64>() {
         Ok(value) => qdrant_client::qdrant::PointId::from(value),
         Err(_) => qdrant_client::qdrant::PointId::from(id),
+    }
+}
+
+pub(crate) fn session_scope_filter(session_key: &SessionKey) -> SearchFilter {
+    SearchFilter {
+        must: vec![
+            FilterCondition::Match {
+                key: "guild_id".to_string(),
+                value: json!(session_key.guild_id.map(|g| g.to_string())),
+            },
+            FilterCondition::Match {
+                key: "channel_id".to_string(),
+                value: json!(session_key.channel_id.to_string()),
+            },
+            FilterCondition::Match {
+                key: "kind".to_string(),
+                value: json!(session_kind_value(&session_key.kind)),
+            },
+        ],
+        should: vec![],
+    }
+}
+
+pub(crate) fn session_kind_value(kind: &SessionKind) -> &'static str {
+    match kind {
+        SessionKind::GuildChannel => "guild",
+        SessionKind::Thread => "thread",
+        SessionKind::DirectMessage => "dm",
     }
 }

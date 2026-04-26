@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use nekoai_domain::agent::session::{SessionKey, SessionKind};
+use nekoai_domain::agent::session::SessionKey;
 use serde_json::json;
 use tracing::{debug, info};
 use uuid::Uuid;
@@ -10,7 +10,10 @@ use uuid::Uuid;
 use crate::{
     embedding::Embedder,
     store::MemoryEntry,
-    vector_db::{FilterCondition, SearchFilter, SearchResult, VectorDbClient},
+    vector_db::{
+        FilterCondition, SearchFilter, SearchResult, VectorDbClient,
+        qdrant::{session_kind_value, session_scope_filter},
+    },
 };
 
 pub struct LongTermMemory {
@@ -126,7 +129,20 @@ impl LongTermMemory {
         top_k: usize,
     ) -> Result<Vec<MemoryEntry>> {
         let filter = session_scope_filter(session_key);
-        self.search_with_filter(query, filter, top_k).await
+        let embedding = self.embedder.embed(query).await;
+        self.search_with_filter_embedding(&embedding, filter, top_k)
+            .await
+    }
+
+    pub async fn search_with_embedding(
+        &self,
+        session_key: &SessionKey,
+        embedding: &[f32],
+        top_k: usize,
+    ) -> Result<Vec<MemoryEntry>> {
+        let filter = session_scope_filter(session_key);
+        self.search_with_filter_embedding(embedding, filter, top_k)
+            .await
     }
 
     async fn search_with_filter(
@@ -136,12 +152,21 @@ impl LongTermMemory {
         top_k: usize,
     ) -> Result<Vec<MemoryEntry>> {
         let embedding = self.embedder.embed(query).await;
+        self.search_with_filter_embedding(&embedding, filter, top_k)
+            .await
+    }
 
+    async fn search_with_filter_embedding(
+        &self,
+        embedding: &[f32],
+        filter: SearchFilter,
+        top_k: usize,
+    ) -> Result<Vec<MemoryEntry>> {
         let results = self
             .db
             .search(crate::vector_db::SearchRequest {
                 collection: &self.collection,
-                vector: embedding,
+                vector: embedding.to_vec(),
                 filter: Some(filter),
                 top_k,
             })
@@ -198,33 +223,5 @@ pub(crate) fn search_result_to_entry(r: SearchResult) -> MemoryEntry {
         score: r.score,
         created_at,
         metadata: r.payload,
-    }
-}
-
-fn session_scope_filter(session_key: &SessionKey) -> SearchFilter {
-    SearchFilter {
-        must: vec![
-            FilterCondition::Match {
-                key: "guild_id".to_string(),
-                value: json!(session_key.guild_id.map(|g| g.to_string())),
-            },
-            FilterCondition::Match {
-                key: "channel_id".to_string(),
-                value: json!(session_key.channel_id.to_string()),
-            },
-            FilterCondition::Match {
-                key: "kind".to_string(),
-                value: json!(session_kind_value(&session_key.kind)),
-            },
-        ],
-        should: vec![],
-    }
-}
-
-pub(crate) fn session_kind_value(kind: &SessionKind) -> &'static str {
-    match kind {
-        SessionKind::GuildChannel => "guild",
-        SessionKind::Thread => "thread",
-        SessionKind::DirectMessage => "dm",
     }
 }

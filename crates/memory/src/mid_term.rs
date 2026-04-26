@@ -9,10 +9,13 @@ use uuid::Uuid;
 
 use crate::{
     embedding::Embedder,
-    long_term::{search_result_to_entry, session_kind_value},
+    long_term::search_result_to_entry,
     short_term::ShortTermEntry,
     store::MemoryEntry,
-    vector_db::{FilterCondition, SearchFilter, VectorDbClient},
+    vector_db::{
+        FilterCondition, SearchFilter, VectorDbClient,
+        qdrant::{session_kind_value, session_scope_filter},
+    },
 };
 
 pub struct MidTermMemory {
@@ -95,13 +98,23 @@ impl MidTermMemory {
     ) -> Result<Vec<MemoryEntry>> {
         let embedding = self.embedder.embed(query).await;
 
+        self.search_with_embedding(session_key, &embedding, top_k)
+            .await
+    }
+
+    pub async fn search_with_embedding(
+        &self,
+        session_key: &SessionKey,
+        embedding: &[f32],
+        top_k: usize,
+    ) -> Result<Vec<MemoryEntry>> {
         let filter = session_scope_filter(session_key);
 
         let results = self
             .db
             .search(crate::vector_db::SearchRequest {
                 collection: &self.collection,
-                vector: embedding,
+                vector: embedding.to_vec(),
                 filter: Some(filter),
                 top_k,
             })
@@ -128,25 +141,5 @@ impl MidTermMemory {
         }
 
         Ok(deleted)
-    }
-}
-
-fn session_scope_filter(session_key: &SessionKey) -> SearchFilter {
-    SearchFilter {
-        must: vec![
-            FilterCondition::Match {
-                key: "guild_id".to_string(),
-                value: json!(session_key.guild_id.map(|g| g.to_string())),
-            },
-            FilterCondition::Match {
-                key: "channel_id".to_string(),
-                value: json!(session_key.channel_id.to_string()),
-            },
-            FilterCondition::Match {
-                key: "kind".to_string(),
-                value: json!(session_kind_value(&session_key.kind)),
-            },
-        ],
-        should: vec![],
     }
 }

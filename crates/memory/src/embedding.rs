@@ -72,7 +72,7 @@ impl Embedder for MockEmbedder {
     async fn embed(&self, text: &str) -> Vec<f32> {
         let mut rng = RandSimple(stable_seed(text));
         let mut out = Vec::with_capacity(self.dim);
-        for _ in 0..self.dim {
+        for _ in 0 .. self.dim {
             out.push(rng.next_f32() * 2.0 - 1.0);
         }
         out

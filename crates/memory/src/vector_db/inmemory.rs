@@ -18,17 +18,17 @@ struct Point {
     payload: HashMap<String, serde_json::Value>,
 }
 
-impl Point {
-    fn new(id: String, vector: Vec<f32>, payload: HashMap<String, serde_json::Value>) -> Self {
-        let norm = vector_norm(&vector);
-        Self {
-            id,
-            vector,
-            norm,
-            payload,
-        }
-    }
-}
+// impl Point {
+//     fn new(id: String, vector: Vec<f32>, payload: HashMap<String, serde_json::Value>) -> Self {
+//         let norm = vector_norm(&vector);
+//         Self {
+//             id,
+//             vector,
+//             norm,
+//             payload,
+//         }
+//     }
+// }
 
 impl InMemoryVectorDb {
     pub fn new() -> Self {
@@ -90,7 +90,8 @@ impl VectorDbClient for InMemoryVectorDb {
             .iter()
             .filter(|p| filter_ref.is_none_or(|filter| matches_filter(&p.payload, filter)))
             .map(|p| {
-                let score = cosine_similarity_with_norms(&req.vector, query_norm, &p.vector, p.norm);
+                let score =
+                    cosine_similarity_with_norms(&req.vector, query_norm, &p.vector, p.norm);
                 SearchResult {
                     id: p.id.clone(),
                     score,
@@ -154,9 +155,9 @@ fn matches_filter(payload: &HashMap<String, serde_json::Value>, filter: &SearchF
 
     filter.should.is_empty()
         || filter
-        .should
-        .iter()
-        .any(|condition| matches_condition(payload, condition))
+            .should
+            .iter()
+            .any(|condition| matches_condition(payload, condition))
 }
 
 fn matches_condition(

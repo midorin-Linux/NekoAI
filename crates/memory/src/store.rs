@@ -150,16 +150,26 @@ impl MemoryStore {
     }
 
     pub async fn recall(&self, session_key: &SessionKey, query: &str) -> RecalledMemory {
-        let mid_term = self
-            .mid_term
-            .search(session_key, query, self.mid_term_top_k)
-            .await
-            .unwrap_or_default();
-        let long_term = self
-            .long_term
-            .search(session_key, query, self.long_term_top_k)
-            .await
-            .unwrap_or_default();
+        let query_embedding = self.embedder.embed(query).await;
+        let (mid_term_result, long_term_result) = tokio::join!(
+            self.mid_term
+                .search_with_embedding(session_key, &query_embedding, self.mid_term_top_k,),
+            self.long_term.search_with_embedding(
+                session_key,
+                &query_embedding,
+                self.long_term_top_k,
+            )
+        );
+
+        let mid_term = mid_term_result.unwrap_or_else(|e| {
+            warn!(error = %e, "failed to search mid-term memory");
+            vec![]
+        });
+
+        let long_term = long_term_result.unwrap_or_else(|e| {
+            warn!(error = %e, "failed to search long-term memory");
+            vec![]
+        });
 
         debug!(
             session = %session_key.channel_id,
