@@ -1,14 +1,17 @@
 use std::fs::File;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use chrono::Utc;
+use tracing::info;
 use tracing_appender::non_blocking;
 pub use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
 
 pub fn init_tracing() -> Result<WorkerGuard> {
-    if let Ok(false) = std::fs::exists("logs") {
-        std::fs::create_dir("logs").context("Failed to create logs directory")?;
+    match std::fs::exists("logs") {
+        Ok(false) => std::fs::create_dir("logs").context("Failed to create logs directory")?,
+        Ok(true) => info!("logs directory already exists"),
+        _ => bail!("Failed to check logs directory existence"),
     }
 
     let date = Utc::now().format("%Y-%m-%d_%H-%M-%S");
