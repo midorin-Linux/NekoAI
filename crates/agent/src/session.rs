@@ -80,7 +80,7 @@ impl SessionManager {
             Ok(())
         } else {
             debug!(target_session = %session_key.channel_id, "non-existent session");
-            Err(anyhow::anyhow!("session not found"))
+            Ok(())
         }
     }
 
