@@ -4,7 +4,7 @@ use dialoguer::{Input, theme::SimpleTheme};
 use indicatif::{ProgressBar, ProgressStyle};
 use nekoai_config::loader::Config;
 use nekoai_infra::logging::{WorkerGuard, init_tracing};
-use nekoai_memory::{short_term::ShortTermMemory, store::MemoryStore};
+use nekoai_memory::store::MemoryStore;
 use tokio::time::sleep;
 use tracing::{error, info, warn};
 
@@ -139,14 +139,13 @@ impl StartCommand {
 
         info!("Initializing context memory");
 
-        let _short_term_memory = ShortTermMemory::new(10);
         let memory_store = MemoryStore::new(&config);
 
         memory_store.initialize().await.inspect_err(|e| {
             error!(error = %e, "failed to initialize vector memory collections");
         })?;
 
-        // Start background cleanup job for mid-term memory retention
+        // Start background cleanup job for midterm memory retention
         memory_store.start_cleanup_job();
 
         spinner.finish_and_clear();
