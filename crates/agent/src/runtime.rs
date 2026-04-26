@@ -9,7 +9,7 @@ use nekoai_memory::{
 };
 use rig::completion::{Chat, Message, Prompt};
 use serde::Deserialize;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Semaphore, mpsc};
 use tracing::{debug, info, warn};
 
 use crate::{
@@ -48,15 +48,24 @@ struct ExtractedFact {
     tags: Vec<String>,
 }
 
+struct ExtractionTask {
+    session_key: SessionKey,
+    user_id: Option<String>,
+    response: String,
+}
+
+const EXTRACTION_QUEUE_SIZE: usize = 100;
+const EXTRACTION_CONCURRENT_LIMIT: usize = 3;
+
 #[derive(Clone)]
 pub struct AgentRuntime {
     session_manager: Arc<Mutex<SessionManager>>,
     context_manager: Arc<ContextManager>,
     memory_store: Arc<MemoryStore>,
     provider: Arc<OpenAICompatibleAdapter>,
-    // tool_registry: Arc<ToolRegistry>,
     agent_model_name: String,
     agent_parameters: Parameters,
+    extraction_tx: mpsc::Sender<ExtractionTask>,
 }
 
 impl AgentRuntime {
@@ -114,8 +123,32 @@ impl AgentRuntime {
         let agent_model_name = config.provider.language_model.model_name;
         let agent_parameters = config.provider.language_model.parameters;
 
-        info!("agent runtime initialized");
+        let (extraction_tx, extraction_rx) = mpsc::channel(EXTRACTION_QUEUE_SIZE);
+
+        let semaphore = Arc::new(Semaphore::new(EXTRACTION_CONCURRENT_LIMIT));
+
+        let provider_clone = provider.clone();
+        let memory_store_clone = memory_store.clone();
+        let model_clone = agent_model_name.clone();
+        let parameters_clone = agent_parameters.clone();
+        let sem_clone = semaphore.clone();
+
+        tokio::spawn(async move {
+            info!("extraction task processor started");
+            extraction_task_processor(
+                extraction_rx,
+                provider_clone,
+                memory_store_clone,
+                model_clone,
+                parameters_clone,
+                sem_clone,
+            )
+            .await;
+        });
+
         on_progress(RuntimeInitProgress::new(5, "agent runtime initialized"));
+
+        info!("agent runtime initialized");
 
         Ok(Self {
             session_manager,
@@ -124,6 +157,7 @@ impl AgentRuntime {
             provider,
             agent_model_name,
             agent_parameters,
+            extraction_tx,
         })
     }
 
@@ -284,26 +318,28 @@ impl AgentRuntime {
         user_id: Option<String>,
         response: String,
     ) {
-        let provider = self.provider.clone();
-        let memory_store = self.memory_store.clone();
-        let model = self.agent_model_name.clone();
-        let parameters = self.agent_parameters.clone();
+        let task = ExtractionTask {
+            session_key,
+            user_id,
+            response,
+        };
 
-        tokio::spawn(async move {
-            if let Err(error) = extract_and_store_long_term_facts(
-                provider,
-                memory_store,
-                model,
-                parameters,
-                session_key,
-                user_id,
-                response,
-            )
-            .await
-            {
-                warn!(error = %error, "failed to extract long-term memory facts");
-            }
-        });
+        if let Err(e) = self.extraction_tx.try_send(task) {
+            warn!(
+                error = %e,
+                "failed to queue long-term memory extraction task (queue may be full)"
+            );
+        }
+    }
+
+    pub async fn shutdown(&self) {
+        info!("shutting down agent runtime...");
+
+        drop(self.extraction_tx.clone());
+
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+        info!("agent runtime shutdown complete");
     }
 }
 
@@ -367,6 +403,49 @@ async fn extract_and_store_long_term_facts(
     );
 
     Ok(())
+}
+
+async fn extraction_task_processor(
+    mut rx: mpsc::Receiver<ExtractionTask>,
+    provider: Arc<OpenAICompatibleAdapter>,
+    memory_store: Arc<MemoryStore>,
+    model: String,
+    parameters: Parameters,
+    semaphore: Arc<Semaphore>,
+) {
+    while let Some(task) = rx.recv().await {
+        let provider = provider.clone();
+        let memory_store = memory_store.clone();
+        let model = model.clone();
+        let parameters = parameters.clone();
+        let sem = semaphore.clone();
+
+        tokio::spawn(async move {
+            let _permit = match sem.acquire().await {
+                Ok(permit) => permit,
+                Err(e) => {
+                    warn!(error = %e, "failed to acquire semaphore permit");
+                    return;
+                }
+            };
+
+            if let Err(error) = extract_and_store_long_term_facts(
+                provider,
+                memory_store,
+                model,
+                parameters,
+                task.session_key,
+                task.user_id,
+                task.response,
+            )
+            .await
+            {
+                warn!(error = %error, "failed to extract long-term memory facts");
+            }
+        });
+    }
+
+    info!("extraction task processor stopped");
 }
 
 fn parse_extracted_facts(raw: &str) -> Vec<(String, Vec<String>)> {
