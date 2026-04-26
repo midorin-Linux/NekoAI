@@ -31,12 +31,6 @@ impl DiscordClient {
             | GatewayIntents::GUILD_MESSAGES
             | GatewayIntents::MESSAGE_CONTENT;
 
-        // Serenity用のhttpクライアントを先に作成
-        let _http = Arc::new(serenity::all::Http::new(&discord_token));
-
-        // Serenity用のキャッシュを先に作成
-        let _shared_cache = Arc::new(serenity::all::Cache::new());
-
         let command_framework =
             crate::command_router::command_framework(guild_id, agent_runtime.clone()).await;
         info!("discord command framework initialized");
