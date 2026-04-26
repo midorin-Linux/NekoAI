@@ -66,17 +66,19 @@ impl ContextManager {
         let mut prompt = self.base_system_prompt.clone();
 
         if !recalled.long_term.is_empty() {
-            prompt.push_str("\n\n## Important information that you remember\n");
+            prompt.push_str("\n\n<ImportantMemories>\n");
             for mem in &recalled.long_term {
-                prompt.push_str(&format!("- {}\n", mem.content));
+                prompt.push_str(&format!("  <Memory>{}</Memory>\n", mem.content));
             }
+            prompt.push_str("\n\n</ImportantMemories>\n");
         }
 
         if !recalled.mid_term.is_empty() {
-            prompt.push_str("\n\n## Related past conversations\n");
+            prompt.push_str("\n\n<PastConversations>\n");
             for summary in &recalled.mid_term {
-                prompt.push_str(&format!("- {}\n", summary.content));
+                prompt.push_str(&format!("<Conversation>{}</Conversation>\n", summary.content));
             }
+            prompt.push_str("\n\n</PastConversations>\n");
         }
 
         prompt
