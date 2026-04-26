@@ -139,7 +139,7 @@ impl StartCommand {
 
         info!("Initializing context memory");
 
-        let memory_store = MemoryStore::new(&config);
+        let memory_store = MemoryStore::new(&config)?;
 
         memory_store.initialize().await.inspect_err(|e| {
             error!(error = %e, "failed to initialize vector memory collections");

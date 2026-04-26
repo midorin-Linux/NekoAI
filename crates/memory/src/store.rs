@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
+use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use nekoai_config::loader::Config as AppConfig;
 use nekoai_domain::agent::session::SessionKey;
@@ -38,7 +39,7 @@ pub struct MemoryEntry {
 }
 
 impl MemoryStore {
-    pub fn new(config: &AppConfig) -> Self {
+    pub fn new(config: &AppConfig) -> Result<Self> {
         let short_term_memory = ShortTermMemory::new(config.memory.short_term_max_entries);
         let vector_db = Arc::new(
             crate::vector_db::qdrant::QdrantClient::new(
@@ -86,7 +87,7 @@ impl MemoryStore {
             "memory store initialized"
         );
 
-        Self {
+        Ok(Self {
             short_term_memory,
             mid_term: Arc::new(MidTermMemory::new(
                 vector_db.clone(),
@@ -102,7 +103,7 @@ impl MemoryStore {
             embedder,
             mid_term_top_k: config.memory.mid_term_top_k,
             long_term_top_k: config.memory.long_term_top_k,
-        }
+        })
     }
 
     pub fn with_components(
