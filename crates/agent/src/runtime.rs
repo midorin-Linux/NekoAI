@@ -104,7 +104,7 @@ impl AgentRuntime {
         ));
 
         let openai_client = rig::providers::openai::Client::builder()
-            .api_key(&config.provider.language_model.api_key)
+            .api_key(config.provider.language_model.api_key.as_ref())
             .base_url(&config.provider.language_model.provider_base_url)
             .build()
             .context("failed to build OpenAI compatible responses client")?

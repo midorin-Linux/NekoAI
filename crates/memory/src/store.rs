@@ -56,7 +56,7 @@ impl MemoryStore {
         let embedding_dim = config.provider.embedding_model.dimension as usize;
         let embedder: Arc<dyn Embedder> = match crate::embedding::OpenAICompatibleEmbedder::new(
             &config.provider.embedding_model.provider_base_url,
-            &config.provider.embedding_model.api_key,
+            config.provider.embedding_model.api_key.as_ref(),
             &config.provider.embedding_model.model_name,
             embedding_dim,
         ) {
@@ -231,7 +231,7 @@ impl MemoryStore {
         debug!(session = %session_key.channel_id, "cleared short-term memory");
     }
 
-    /// Start a background cleanup job for mid-term memory retention.
+    /// Start a background cleanup job for midterm memory retention.
     /// This runs periodically and deletes entries older than retention_days.
     pub fn start_cleanup_job(&self) {
         let mid_term = self.mid_term.clone();

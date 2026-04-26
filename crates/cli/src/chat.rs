@@ -14,7 +14,7 @@ impl ChatClient {
             ChatPlatform::Discord => {
                 info!("initializing discord chat client");
                 let client = DiscordClient::new(
-                    config.discord.token.clone(),
+                    config.discord.token.expose().to_owned(),
                     config.discord.guild_id,
                     runtime,
                 )

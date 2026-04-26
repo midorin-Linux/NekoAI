@@ -1,3 +1,5 @@
+use std::fmt;
+
 use anyhow::Result;
 use config::{Config as ConfigBuilder, ConfigError, File};
 use serde::Deserialize;
@@ -5,7 +7,7 @@ use tracing::{debug, info};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Discord {
-    pub token: String,
+    pub token: SecretKey,
     pub guild_id: u64,
 }
 
@@ -27,7 +29,7 @@ pub struct Parameters {
 #[derive(Debug, Clone, Deserialize)]
 pub struct LanguageModel {
     pub provider_base_url: String,
-    pub api_key: String,
+    pub api_key: SecretKey,
     pub model_name: String,
     pub parameters: Parameters,
 }
@@ -35,7 +37,7 @@ pub struct LanguageModel {
 #[derive(Debug, Clone, Deserialize)]
 pub struct EmbeddingModel {
     pub provider_base_url: String,
-    pub api_key: String,
+    pub api_key: SecretKey,
     pub model_name: String,
     pub dimension: u64,
 }
@@ -153,5 +155,33 @@ impl Config {
         }
 
         parsed
+    }
+}
+
+#[derive(Clone, Deserialize)]
+pub struct SecretKey(String);
+
+impl SecretKey {
+    pub fn expose(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl AsRef<str> for SecretKey {
+    fn as_ref(&self) -> &str {
+        self.expose()
+    }
+}
+
+impl fmt::Debug for SecretKey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        let visible_length = 4;
+        let masked = {
+            let length = self.0.chars().count();
+            let start = length.saturating_sub(visible_length);
+            let extracted: String = self.0.chars().skip(start).collect();
+            format!("{:*>20}", &extracted)
+        };
+        f.debug_tuple("SecretKey").field(&masked).finish()
     }
 }
