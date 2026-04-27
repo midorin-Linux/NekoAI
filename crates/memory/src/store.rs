@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use nekoai_config::loader::Config as AppConfig;
 use nekoai_domain::agent::session::SessionKey;

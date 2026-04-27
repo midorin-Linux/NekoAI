@@ -76,7 +76,10 @@ impl ContextManager {
         if !recalled.mid_term.is_empty() {
             prompt.push_str("\n\n<PastConversations>\n");
             for summary in &recalled.mid_term {
-                prompt.push_str(&format!("<Conversation>{}</Conversation>\n", summary.content));
+                prompt.push_str(&format!(
+                    "<Conversation>{}</Conversation>\n",
+                    summary.content
+                ));
             }
             prompt.push_str("\n\n</PastConversations>\n");
         }

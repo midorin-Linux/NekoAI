@@ -1,7 +1,7 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use tracing::info;
-use tracing_appender::{non_blocking, rolling};
 pub use tracing_appender::non_blocking::WorkerGuard;
+use tracing_appender::{non_blocking, rolling};
 use tracing_subscriber::EnvFilter;
 
 pub fn init_tracing() -> Result<WorkerGuard> {

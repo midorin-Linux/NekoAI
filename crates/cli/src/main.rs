@@ -1,12 +1,13 @@
 mod chat;
 pub mod commands;
 
+use std::process::ExitCode;
+
 use anyhow::{Result, bail};
 use clap::Command;
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use nekoai_agent::runtime::{AgentRuntime, RuntimeInitProgress};
-use std::process::ExitCode;
 use tracing::{error, info, warn};
 
 fn cli() -> Command {
@@ -68,7 +69,7 @@ async fn run() -> Result<()> {
                         "✗".red(),
                         err
                     );
-                    return Err(err.into());
+                    return Err(err);
                 }
             };
 

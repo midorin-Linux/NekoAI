@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use anyhow::{Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 use nekoai_agent::runtime::AgentRuntime;
