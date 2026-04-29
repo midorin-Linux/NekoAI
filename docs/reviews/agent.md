@@ -52,7 +52,7 @@
   - 要約処理を `spawn_long_term_extraction` と同様に非同期タスクに分離する
   - 応答は即座に返し、要約はバックグラウンドで完了させる
 
-### 7. [Low] `promote_short_term_to_mid_term` が `clear_session` からも呼ばれ、クリア時に LLM 呼び出しが発生する
+### 7. [Low] `promote_short_term_to_mid_term` が `clear_session` からも呼ばれ、クリア時に LLM 呼び出しが発生する (完了)
 - 該当: `crates/agent/src/runtime.rs:164`
 - `/clear` 実行時にセッションの要約が行われ LLM 呼び出しが発生するため、ユーザーはクリアが遅いと感じる可能性があります。
 - 修正案:
