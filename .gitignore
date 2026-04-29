@@ -5,3 +5,4 @@
 .config/config.json
 logs
 .env
+.claude
