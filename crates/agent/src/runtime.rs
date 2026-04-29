@@ -393,14 +393,39 @@ async fn extract_and_store_long_term_facts(
     user_id: Option<String>,
     response: String,
 ) -> Result<()> {
-    let extractor = provider.build_agent(model.as_str(), parameters).build();
     let prompt = format!(
         "以下の応答から、将来の会話で参照すべき重要な情報があれば JSON で出力してください。\nなければ空配列を返してください。\n\n形式: [{{\"fact\": \"...\", \"tags\": [\"...\"]}}]\n\n応答: {}",
         response
     );
 
-    let extracted = extractor.prompt(prompt).await?;
-    let facts = parse_extracted_facts(&extracted);
+    let retry_strategy = tokio_retry::strategy::FixedInterval::from_millis(1000).take(1);
+
+    let facts = tokio_retry::Retry::spawn(retry_strategy, || {
+        let provider = provider.clone();
+        let model = model.clone();
+        let parameters = parameters.clone();
+        let prompt = prompt.clone();
+        let session_key = session_key.clone();
+
+        async move {
+            let extractor = provider.build_agent(model.as_str(), parameters).build();
+            let extracted = extractor.prompt(prompt).await.context("failed to prompt extraction agent")?;
+            
+            match parse_extracted_facts(&extracted) {
+                Ok(facts) => Ok(facts),
+                Err(e) => {
+                    warn!(
+                        session = %session_key.channel_id,
+                        error = %e,
+                        extracted = %extracted,
+                        "JSON parse failed, retrying long-term memory extraction"
+                    );
+                    Err(e)
+                }
+            }
+        }
+    })
+    .await?;
 
     if facts.is_empty() {
         debug!(
@@ -468,7 +493,7 @@ async fn extraction_task_processor(
     info!("extraction task processor stopped");
 }
 
-fn parse_extracted_facts(raw: &str) -> Vec<(String, Vec<String>)> {
+fn parse_extracted_facts(raw: &str) -> Result<Vec<(String, Vec<String>)>> {
     parse_extracted_facts_json(raw)
         .or_else(|| {
             let trimmed = raw.trim();
@@ -481,11 +506,17 @@ fn parse_extracted_facts(raw: &str) -> Vec<(String, Vec<String>)> {
 
             parse_extracted_facts_json(&trimmed[start ..= end])
         })
-        .unwrap_or_default()
+        .ok_or_else(|| anyhow::anyhow!("failed to parse extracted facts JSON: {}", raw))
 }
 
 fn parse_extracted_facts_json(candidate: &str) -> Option<Vec<(String, Vec<String>)>> {
-    let parsed: Vec<ExtractedFact> = serde_json::from_str(candidate).ok()?;
+    let parsed: Vec<ExtractedFact> = serde_json::from_str(candidate).map_err(|e| {
+        warn!(
+            error = %e,
+            candidate = candidate,
+            "failed to parse extracted facts JSON"
+        );
+    }).ok()?;
     let facts = parsed
         .into_iter()
         .filter_map(|item| {
