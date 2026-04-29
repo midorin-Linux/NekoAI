@@ -162,15 +162,35 @@ impl AgentRuntime {
     }
 
     pub async fn clear_session(&self, session_key: &SessionKey) -> Result<()> {
-        if let Err(error) = self
-            .promote_short_term_to_mid_term(session_key, "clear_command")
-            .await
-        {
-            warn!(
-                session = %session_key.channel_id,
-                error = %error,
-                "failed to promote short-term memory before clearing session"
-            );
+        // Capture messages before clearing so background summarization has data.
+        let messages = self.memory_store.get_short_term_messages(session_key);
+
+        if !messages.is_empty() {
+            let this = self.clone();
+            let session_key = session_key.clone();
+            tokio::spawn(async move {
+                match this.generate_mid_term_summary(&messages).await {
+                    Ok(summary) => {
+                        this.memory_store
+                            .promote_to_mid_term(&session_key, summary)
+                            .await
+                            .unwrap_or_else(|error| {
+                                warn!(
+                                    session = %session_key.channel_id,
+                                    error = %error,
+                                    "failed to store mid-term summary during clear"
+                                );
+                            });
+                    }
+                    Err(error) => {
+                        warn!(
+                            session = %session_key.channel_id,
+                            error = %error,
+                            "failed to generate mid-term summary during clear"
+                        );
+                    }
+                }
+            });
         }
 
         self.memory_store.clear_short_term(session_key);
