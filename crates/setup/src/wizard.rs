@@ -2,8 +2,8 @@ use anyhow::{Result, bail};
 use colored::Colorize;
 use dialoguer::{Confirm, Input, Select, theme::SimpleTheme};
 use nekoai_config::loader::{
-    ChatPlatform, Config, Discord, EmbeddingModel, LanguageModel, Memory, Provider, SecretKey,
-    ToolPermissions, VectorDb,
+    ChatPlatform, Config, ConversationModel, Discord, EmbeddingModel, Memory, Provider, SecretKey,
+    SummarizerModel, ToolPermissions, VectorDb,
 };
 
 const EMBED_OPTIONS: &[(&str, u64)] = &[("Custom", 1536)];
@@ -54,11 +54,24 @@ pub fn run_wizard() -> Result<Config> {
 
     // ── Step 3: Model Selection ────────────────────────────────
     print_header(3, 4, "Model Selection");
+    println!("  Enter the AI model names to use:");
+    println!(
+        "  {}",
+        "  The conversation model handles user interactions.".dimmed()
+    );
+    println!(
+        "  {}",
+        "  The summarizer model (can be a cheaper/faster one) handles memory summarization.".dimmed()
+    );
     println!();
     let model_name: String = Input::with_theme(&SimpleTheme)
-        .with_prompt("  Model name")
+        .with_prompt("  Conversation model name")
         .interact_text()?;
-
+    println!();
+    let summarizer_model_name: String = Input::with_theme(&SimpleTheme)
+        .with_prompt("  Summarizer model name")
+        .with_initial_text(model_name.clone())
+        .interact_text()?;
     println!();
     println!("  Select an embedding model for vector search (long-term & mid-term memory):");
     println!();
@@ -115,10 +128,11 @@ pub fn run_wizard() -> Result<Config> {
         "  Discord Token  : {}",
         "*".repeat(token.len().saturating_sub(4)) + &token[token.len().saturating_sub(4) ..]
     );
-    println!("  Base URL       : {}", base_url);
-    println!("  Model          : {}", model_name);
+    println!("  Base URL        : {}", base_url);
+    println!("  Conversation    : {}", model_name);
+    println!("  Summarizer      : {}", summarizer_model_name);
     println!(
-        "  Embedding Model: {} (dim: {})",
+        "  Embedding Model : {} (dim: {})",
         embed_model_name, embed_dimension
     );
     println!(
@@ -156,10 +170,16 @@ pub fn run_wizard() -> Result<Config> {
             guild_id: 0,
         },
         provider: Provider {
-            language_model: LanguageModel {
+            conversation_model: ConversationModel {
                 provider_base_url: base_url.clone(),
-                api_key: SecretKey::new(api_key),
-                model_name,
+                api_key: SecretKey::new(api_key.clone()),
+                model_name: model_name.clone(),
+                parameters: Default::default(),
+            },
+            summarizer_model: SummarizerModel {
+                provider_base_url: base_url.clone(),
+                api_key: SecretKey::new(api_key.clone()),
+                model_name: summarizer_model_name,
                 parameters: Default::default(),
             },
             embedding_model: EmbeddingModel {

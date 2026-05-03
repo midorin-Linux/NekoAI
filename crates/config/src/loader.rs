@@ -52,7 +52,15 @@ const fn default_top_p() -> f64 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LanguageModel {
+pub struct ConversationModel {
+    pub provider_base_url: String,
+    pub api_key: SecretKey,
+    pub model_name: String,
+    pub parameters: Parameters,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SummarizerModel {
     pub provider_base_url: String,
     pub api_key: SecretKey,
     pub model_name: String,
@@ -69,7 +77,8 @@ pub struct EmbeddingModel {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Provider {
-    pub language_model: LanguageModel,
+    pub conversation_model: ConversationModel,
+    pub summarizer_model: SummarizerModel,
     pub embedding_model: EmbeddingModel,
 }
 

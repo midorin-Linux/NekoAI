@@ -72,9 +72,12 @@ pub struct AgentRuntime {
     session_manager: Arc<Mutex<SessionManager>>,
     context_manager: Arc<ContextManager>,
     memory_store: Arc<MemoryStore>,
-    provider: Arc<OpenAICompatibleAdapter>,
-    agent_model_name: String,
-    agent_parameters: Parameters,
+    conversation_model: Arc<OpenAICompatibleAdapter>,
+    conversation_model_name: String,
+    conversation_model_parameters: Parameters,
+    summarization_model: Arc<OpenAICompatibleAdapter>,
+    summarization_model_name: String,
+    summarization_model_parameters: Parameters,
     extraction_tx: mpsc::Sender<ExtractionTask>,
     tool_server_handle: ToolServerHandle,
     summarizing: Arc<DashMap<SessionKey, ()>>,
@@ -115,25 +118,36 @@ impl AgentRuntime {
             "context manager and memory store ready",
         ));
 
-        let openai_client = rig::providers::openai::Client::builder()
-            .api_key(config.provider.language_model.api_key.as_ref())
-            .base_url(&config.provider.language_model.provider_base_url)
+        let conversation_client = rig::providers::openai::Client::builder()
+            .api_key(config.provider.conversation_model.api_key.as_ref())
+            .base_url(&config.provider.conversation_model.provider_base_url)
             .build()
             .context("failed to build OpenAI compatible responses client")?
             .completions_api();
-        let provider = Arc::new(OpenAICompatibleAdapter::new(openai_client));
+        let conversation_model = Arc::new(OpenAICompatibleAdapter::new(conversation_client));
+
+        let summarization_client = rig::providers::openai::Client::builder()
+            .api_key(config.provider.summarizer_model.api_key.as_ref())
+            .base_url(&config.provider.summarizer_model.provider_base_url)
+            .build()
+            .context("failed to build OpenAI compatible responses client")?
+            .completions_api();
+        let summarization_model = Arc::new(OpenAICompatibleAdapter::new(summarization_client));
         on_progress(RuntimeInitProgress::new(
             4,
             "language model provider initialized",
         ));
 
         info!(
-            provider = provider.provider_name(),
+            conversation_model = conversation_model.provider_name(),
+            summarzation_model = summarization_model.provider_name(),
             "language model client initialized"
         );
 
-        let agent_model_name = config.provider.language_model.model_name;
-        let agent_parameters = config.provider.language_model.parameters;
+        let conversation_model_name = config.provider.conversation_model.model_name;
+        let conversation_model_parameters = config.provider.conversation_model.parameters;
+        let summarization_model_name = config.provider.summarizer_model.model_name;
+        let summarization_model_parameters = config.provider.summarizer_model.parameters;
 
         let (extraction_tx, extraction_rx) = mpsc::channel(EXTRACTION_QUEUE_SIZE);
 
@@ -141,10 +155,12 @@ impl AgentRuntime {
 
         let summarizing = Arc::new(DashMap::new());
 
-        let provider_clone = provider.clone();
+        let provider_clone = conversation_model.clone();
         let memory_store_clone = memory_store.clone();
-        let model_clone = agent_model_name.clone();
-        let parameters_clone = agent_parameters.clone();
+        let conversation_model_name_clone = conversation_model_name.clone();
+        let conversation_model_parameters_clone = conversation_model_parameters.clone();
+        // let summarization_model_name_clone = summarization_model_name.clone();
+        // let summarization_model_parameters_clone = summarization_model_parameters.clone();
         let sem_clone = semaphore.clone();
 
         tokio::spawn(async move {
@@ -153,8 +169,8 @@ impl AgentRuntime {
                 extraction_rx,
                 provider_clone,
                 memory_store_clone,
-                model_clone,
-                parameters_clone,
+                conversation_model_name_clone,
+                conversation_model_parameters_clone,
                 sem_clone,
             )
             .await;
@@ -171,9 +187,12 @@ impl AgentRuntime {
             session_manager,
             context_manager,
             memory_store,
-            provider,
-            agent_model_name,
-            agent_parameters,
+            conversation_model,
+            conversation_model_name,
+            conversation_model_parameters,
+            summarization_model,
+            summarization_model_name,
+            summarization_model_parameters,
             extraction_tx,
             tool_server_handle,
             summarizing
@@ -263,10 +282,10 @@ impl AgentRuntime {
         debug!(context_turns = context.turns.len(), "context built");
 
         let agent = self
-            .provider
+            .conversation_model
             .build_agent(
-                self.agent_model_name.as_str(),
-                self.agent_parameters.clone(),
+                self.conversation_model_name.as_str(),
+                self.conversation_model_parameters.clone(),
             )
             .preamble(context.system_prompt.as_str())
             .tool_server_handle(self.tool_server_handle.clone())
@@ -358,15 +377,15 @@ impl AgentRuntime {
     async fn generate_mid_term_summary(&self, messages: &[ShortTermEntry]) -> Result<String> {
         let conversation = escape_xml(&format_short_term_messages(messages));
         let prompt = format!(
-            "<summarization_task>\n  <instruction>The following is a conversation log from the same session. Please summarize the main points of this conversation in three sentences, while preserving the flow of the conversation and the decisions made. Please use natural sentences, not bullet points, and do not include any more than three sentences.<instruction>\n  <conversation_log>{}</conversation_log>\n</summarization_task>",
+            "<summarization_task>\n  <instruction>\n    The following is a conversation log from the same session.\n    - Please retain the main topics, user intent, conclusions reached, and unresolved issues.\n    - Please summarize it concisely in 5-10 sentences, using the original language of the conversation.\n    - Please write in natural prose, not in bullet points.\n  </instruction>\n  <conversation_log>{}</conversation_log>\n</summarization_task>",
             conversation
         );
 
         let summarizer = self
-            .provider
+            .summarization_model
             .build_agent(
-                self.agent_model_name.as_str(),
-                self.agent_parameters.clone(),
+                self.summarization_model_name.as_str(),
+                self.summarization_model_parameters.clone(),
             )
             .build();
 

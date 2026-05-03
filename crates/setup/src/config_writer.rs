@@ -59,22 +59,59 @@ fn merge_with_existing(new_config: &Config) -> Result<Config> {
     }
 
     // Provider (language model): keep existing API key if not placeholder
-    if !is_placeholder(existing.provider.language_model.api_key.expose()) {
-        merged.provider.language_model.api_key = existing.provider.language_model.api_key;
+    if !is_placeholder(existing.provider.conversation_model.api_key.expose()) {
+        merged.provider.conversation_model.api_key = existing.provider.conversation_model.api_key;
     }
     // Keep existing model name and base URL if they differ from defaults
-    if !existing.provider.language_model.model_name.is_empty() {
-        merged.provider.language_model.model_name =
-            existing.provider.language_model.model_name.clone();
+    if !existing.provider.conversation_model.model_name.is_empty() {
+        merged.provider.conversation_model.model_name =
+            existing.provider.conversation_model.model_name.clone();
     }
     if !existing
         .provider
-        .language_model
+        .conversation_model
         .provider_base_url
         .is_empty()
     {
-        merged.provider.language_model.provider_base_url =
-            existing.provider.language_model.provider_base_url.clone();
+        merged.provider.conversation_model.provider_base_url =
+            existing.provider.conversation_model.provider_base_url.clone();
+    }
+
+    // Provider (summarizer model): keep existing API key if not placeholder
+    if !is_placeholder(existing.provider.summarizer_model.api_key.expose()) {
+        merged.provider.summarizer_model.api_key = existing.provider.summarizer_model.api_key;
+    }
+    if !existing.provider.summarizer_model.model_name.is_empty() {
+        merged.provider.summarizer_model.model_name =
+            existing.provider.summarizer_model.model_name.clone();
+    }
+    if !existing
+        .provider
+        .summarizer_model
+        .provider_base_url
+        .is_empty()
+    {
+        merged.provider.summarizer_model.provider_base_url =
+            existing.provider.summarizer_model.provider_base_url.clone();
+    }
+    if existing
+        .provider
+        .summarizer_model
+        .parameters
+        .max_token
+        .abs_diff(262144)
+        > 1
+    {
+        merged.provider.summarizer_model.parameters.max_token =
+            existing.provider.summarizer_model.parameters.max_token;
+    }
+    if (existing.provider.summarizer_model.parameters.temperature - 1.0).abs() > 0.01 {
+        merged.provider.summarizer_model.parameters.temperature =
+            existing.provider.summarizer_model.parameters.temperature;
+    }
+    if (existing.provider.summarizer_model.parameters.top_p - 0.95).abs() > 0.01 {
+        merged.provider.summarizer_model.parameters.top_p =
+            existing.provider.summarizer_model.parameters.top_p;
     }
 
     // Provider (embedding model): keep existing API key if not placeholder
@@ -101,22 +138,22 @@ fn merge_with_existing(new_config: &Config) -> Result<Config> {
     // Parameters: keep existing if they differ from CLI defaults
     if existing
         .provider
-        .language_model
+        .conversation_model
         .parameters
         .max_token
         .abs_diff(262144)
         > 1
     {
-        merged.provider.language_model.parameters.max_token =
-            existing.provider.language_model.parameters.max_token;
+        merged.provider.conversation_model.parameters.max_token =
+            existing.provider.conversation_model.parameters.max_token;
     }
-    if (existing.provider.language_model.parameters.temperature - 1.0).abs() > 0.01 {
-        merged.provider.language_model.parameters.temperature =
-            existing.provider.language_model.parameters.temperature;
+    if (existing.provider.conversation_model.parameters.temperature - 1.0).abs() > 0.01 {
+        merged.provider.conversation_model.parameters.temperature =
+            existing.provider.conversation_model.parameters.temperature;
     }
-    if (existing.provider.language_model.parameters.top_p - 0.95).abs() > 0.01 {
-        merged.provider.language_model.parameters.top_p =
-            existing.provider.language_model.parameters.top_p;
+    if (existing.provider.conversation_model.parameters.top_p - 0.95).abs() > 0.01 {
+        merged.provider.conversation_model.parameters.top_p =
+            existing.provider.conversation_model.parameters.top_p;
     }
 
     // Memory settings: keep existing if they differ from defaults

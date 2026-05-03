@@ -1,7 +1,4 @@
-use nekoai_config::loader::{
-    ChatPlatform, Config, Discord, EmbeddingModel, LanguageModel, Memory, Parameters, Provider,
-    SecretKey, ToolPermissions, VectorDb,
-};
+use nekoai_config::loader::{ChatPlatform, Config, ConversationModel, Discord, EmbeddingModel, Memory, Parameters, Provider, SecretKey, SummarizerModel, ToolPermissions, VectorDb};
 
 /// Build a Config from explicitly provided CLI arguments.
 /// Missing optional fields use sensible defaults.
@@ -15,10 +12,20 @@ pub fn make_config(token: &str, provider: &str, model: &str) -> Config {
             guild_id: 0,
         },
         provider: Provider {
-            language_model: LanguageModel {
+            conversation_model: ConversationModel {
                 provider_base_url: provider_base_url.clone(),
                 api_key: SecretKey::new("".to_owned()),
                 model_name,
+                parameters: Parameters {
+                    max_token: 262144,
+                    temperature: 1.0,
+                    top_p: 0.95,
+                },
+            },
+            summarizer_model: SummarizerModel {
+                provider_base_url: provider_base_url.clone(),
+                api_key: SecretKey::new("".to_owned()),
+                model_name: "gpt-4o-mini".to_owned(),
                 parameters: Parameters {
                     max_token: 262144,
                     temperature: 1.0,
