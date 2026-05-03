@@ -88,13 +88,23 @@ cd NekoAI
     "guild_id": 1234567890
   },
   "provider": {
-    "language_model": {
+    "conversation_model": {
       "provider_base_url": "https://api.openai.com/v1",
       "api_key": "YOUR_API_KEY",
       "model_name": "gpt-4o",
       "parameters": {
         "max_token": 262144,
         "temperature": 1.0,
+        "top_p": 0.95
+      }
+    },
+    "summarizer_model": {
+      "provider_base_url": "https://api.openai.com/v1",
+      "api_key": "YOUR_API_KEY",
+      "model_name": "gpt-4o",
+      "parameters": {
+        "max_token": 262144,
+        "temperature": 0.2,
         "top_p": 0.95
       }
     },
