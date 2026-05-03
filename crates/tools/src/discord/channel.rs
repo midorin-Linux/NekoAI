@@ -1,14 +1,18 @@
 use std::sync::Arc;
 
-use rig::completion::ToolDefinition;
-use rig::tool::Tool;
-use serde_json::{json, Value};
-use serenity::all::{CreateChannel, EditChannel};
-use serenity::http::Http;
+use rig::{completion::ToolDefinition, tool::Tool};
+use serde_json::{Value, json};
+use serenity::{
+    all::{CreateChannel, EditChannel},
+    http::Http,
+};
 
 use crate::discord::{
     error::DiscordToolError,
-    helpers::{err, get_bool, get_channel_id, get_guild_id_default, get_string, get_u16, get_u32, ok, parse_channel_type, to_value},
+    helpers::{
+        err, get_bool, get_channel_id, get_guild_id_default, get_string, get_u16, get_u32, ok,
+        parse_channel_type, to_value,
+    },
 };
 
 pub struct CreateDiscordChannel {

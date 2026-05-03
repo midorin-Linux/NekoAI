@@ -7,8 +7,13 @@ use nekoai_memory::{
     short_term::{Role, ShortTermEntry},
     store::MemoryStore,
 };
-use rig::completion::{Chat, Message, Prompt};
-use rig::tool::{ToolDyn, server::{ToolServer, ToolServerHandle}};
+use rig::{
+    completion::{Chat, Message, Prompt},
+    tool::{
+        ToolDyn,
+        server::{ToolServer, ToolServerHandle},
+    },
+};
 use serde::Deserialize;
 use tokio::sync::{Mutex, Semaphore, mpsc};
 use tracing::{debug, info, warn};
@@ -358,7 +363,7 @@ impl AgentRuntime {
             );
         }
     }
-    
+
     pub async fn add_tool(&self, tool: impl ToolDyn + 'static) {
         if let Err(e) = self.tool_server_handle.add_tool(tool).await {
             warn!(error = %e, "failed to register tool");

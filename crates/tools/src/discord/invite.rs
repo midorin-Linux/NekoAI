@@ -1,23 +1,42 @@
 use std::sync::Arc;
 
-use rig::completion::ToolDefinition;
-use rig::tool::Tool;
-use serde_json::{json, Value};
-use serenity::all::CreateInvite;
-use serenity::http::Http;
+use rig::{completion::ToolDefinition, tool::Tool};
+use serde_json::{Value, json};
+use serenity::{all::CreateInvite, http::Http};
 
 use crate::discord::{
     error::DiscordToolError,
-    helpers::{err, get_bool, get_channel_id, get_guild_id_default, get_string, get_u32, get_u8, ok, to_value},
+    helpers::{
+        err, get_bool, get_channel_id, get_guild_id_default, get_string, get_u8, get_u32, ok,
+        to_value,
+    },
 };
 
-pub struct GetDiscordInviteList { http: Arc<Http> }
-pub struct CreateDiscordInvite { http: Arc<Http> }
-pub struct DeleteDiscordInvite { http: Arc<Http> }
+pub struct GetDiscordInviteList {
+    http: Arc<Http>,
+}
+pub struct CreateDiscordInvite {
+    http: Arc<Http>,
+}
+pub struct DeleteDiscordInvite {
+    http: Arc<Http>,
+}
 
-impl GetDiscordInviteList { pub fn new(http: Arc<Http>) -> Self { Self { http } } }
-impl CreateDiscordInvite { pub fn new(http: Arc<Http>) -> Self { Self { http } } }
-impl DeleteDiscordInvite { pub fn new(http: Arc<Http>) -> Self { Self { http } } }
+impl GetDiscordInviteList {
+    pub fn new(http: Arc<Http>) -> Self {
+        Self { http }
+    }
+}
+impl CreateDiscordInvite {
+    pub fn new(http: Arc<Http>) -> Self {
+        Self { http }
+    }
+}
+impl DeleteDiscordInvite {
+    pub fn new(http: Arc<Http>) -> Self {
+        Self { http }
+    }
+}
 
 impl Tool for GetDiscordInviteList {
     const NAME: &'static str = "get_discord_invite_list";
@@ -38,7 +57,9 @@ impl Tool for GetDiscordInviteList {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let Some(guild_id) = get_guild_id_default(&args) else { return Ok(err("guild_id is required")); };
+        let Some(guild_id) = get_guild_id_default(&args) else {
+            return Ok(err("guild_id is required"));
+        };
         match guild_id.invites(&self.http).await {
             Ok(invites) => Ok(ok(to_value(&invites))),
             Err(error) => Ok(err(format!("Failed to fetch invites: {error}"))),
@@ -71,13 +92,23 @@ impl Tool for CreateDiscordInvite {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let Some(channel_id) = get_channel_id(&args, "channel_id") else { return Ok(err("channel_id is required")); };
+        let Some(channel_id) = get_channel_id(&args, "channel_id") else {
+            return Ok(err("channel_id is required"));
+        };
 
         let mut builder = CreateInvite::new();
-        if let Some(max_age) = get_u32(&args, "max_age") { builder = builder.max_age(max_age); }
-        if let Some(max_uses) = get_u8(&args, "max_uses") { builder = builder.max_uses(max_uses); }
-        if let Some(temporary) = get_bool(&args, "temporary") { builder = builder.temporary(temporary); }
-        if let Some(unique) = get_bool(&args, "unique") { builder = builder.unique(unique); }
+        if let Some(max_age) = get_u32(&args, "max_age") {
+            builder = builder.max_age(max_age);
+        }
+        if let Some(max_uses) = get_u8(&args, "max_uses") {
+            builder = builder.max_uses(max_uses);
+        }
+        if let Some(temporary) = get_bool(&args, "temporary") {
+            builder = builder.temporary(temporary);
+        }
+        if let Some(unique) = get_bool(&args, "unique") {
+            builder = builder.unique(unique);
+        }
 
         match channel_id.create_invite(&self.http, builder).await {
             Ok(invite) => Ok(ok(to_value(&invite))),
@@ -105,7 +136,9 @@ impl Tool for DeleteDiscordInvite {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let Some(code) = get_string(&args, "code") else { return Ok(err("code is required")); };
+        let Some(code) = get_string(&args, "code") else {
+            return Ok(err("code is required"));
+        };
         match self.http.delete_invite(code.as_str(), None).await {
             Ok(invite) => Ok(ok(to_value(&invite))),
             Err(error) => Ok(err(format!("Failed to delete invite: {error}"))),

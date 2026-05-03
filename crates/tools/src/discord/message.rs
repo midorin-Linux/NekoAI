@@ -5,17 +5,18 @@
 
 use std::sync::Arc;
 
-use rig::completion::ToolDefinition;
-use rig::tool::Tool;
+use rig::{completion::ToolDefinition, tool::Tool};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
-use serenity::all::{ChannelId, EditMessage, GetMessages};
-use serenity::http::Http;
+use serde_json::{Value, json};
+use serenity::{
+    all::{ChannelId, EditMessage, GetMessages},
+    http::Http,
+};
 
 use crate::discord::{
     error::DiscordToolError,
     helpers::{
-        err, get_channel_id, get_message_id, get_string, get_u64_list, get_u8, get_user_id, ok,
+        err, get_channel_id, get_message_id, get_string, get_u8, get_u64_list, get_user_id, ok,
         parse_reaction_type, to_value,
     },
 };
@@ -256,7 +257,10 @@ impl Tool for EditDiscordMessage {
 
         let builder = EditMessage::new().content(content);
 
-        match channel_id.edit_message(&self.http, message_id, builder).await {
+        match channel_id
+            .edit_message(&self.http, message_id, builder)
+            .await
+        {
             Ok(message) => Ok(ok(to_value(&message))),
             Err(error) => Ok(err(format!("Failed to edit message: {error}"))),
         }
@@ -367,7 +371,10 @@ impl Tool for BulkDeleteDiscordMessages {
             return Ok(err("message_ids is required"));
         };
 
-        let message_ids = message_ids.into_iter().map(serenity::all::MessageId::new).collect::<Vec<_>>();
+        let message_ids = message_ids
+            .into_iter()
+            .map(serenity::all::MessageId::new)
+            .collect::<Vec<_>>();
 
         match channel_id.delete_messages(&self.http, &message_ids).await {
             Ok(()) => Ok(ok(json!({ "deleted": message_ids.len() }))),
@@ -539,7 +546,10 @@ impl Tool for AddDiscordReaction {
             None => return Ok(err("Invalid emoji format")),
         };
 
-        match channel_id.create_reaction(&self.http, message_id, reaction).await {
+        match channel_id
+            .create_reaction(&self.http, message_id, reaction)
+            .await
+        {
             Ok(()) => Ok(ok(json!({ "reacted": true }))),
             Err(error) => Ok(err(format!("Failed to add reaction: {error}"))),
         }
@@ -586,7 +596,10 @@ impl Tool for RemoveDiscordReaction {
         };
         let user_id = get_user_id(&args, "user_id");
 
-        match channel_id.delete_reaction(&self.http, message_id, user_id, reaction).await {
+        match channel_id
+            .delete_reaction(&self.http, message_id, user_id, reaction)
+            .await
+        {
             Ok(()) => Ok(ok(json!({ "removed": true }))),
             Err(error) => Ok(err(format!("Failed to remove reaction: {error}"))),
         }

@@ -6,9 +6,7 @@ use nekoai_config::loader::{
     ToolPermissions, VectorDb,
 };
 
-const EMBED_OPTIONS: &[(&str, u64)] = &[
-    ("Custom", 1536),
-];
+const EMBED_OPTIONS: &[(&str, u64)] = &[("Custom", 1536)];
 
 fn print_header(step: usize, total: usize, title: &str) {
     println!();
@@ -115,7 +113,7 @@ pub fn run_wizard() -> Result<Config> {
     println!();
     println!(
         "  Discord Token  : {}",
-        "*".repeat(token.len().saturating_sub(4)) + &token[token.len().saturating_sub(4)..]
+        "*".repeat(token.len().saturating_sub(4)) + &token[token.len().saturating_sub(4) ..]
     );
     println!("  Base URL       : {}", base_url);
     println!("  Model          : {}", model_name);

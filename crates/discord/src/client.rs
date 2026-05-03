@@ -1,10 +1,12 @@
+use std::sync::Arc;
+
 use anyhow::{Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 use nekoai_agent::runtime::AgentRuntime;
 use nekoai_tools::discord::{
     channel::{
-        CreateDiscordChannel, DeleteDiscordChannel, GetDiscordChannelInfo,
-        GetDiscordChannelList, ModifyDiscordChannel,
+        CreateDiscordChannel, DeleteDiscordChannel, GetDiscordChannelInfo, GetDiscordChannelList,
+        ModifyDiscordChannel,
     },
     emoji::{CreateDiscordEmoji, DeleteDiscordEmoji, GetDiscordEmojiList, GetDiscordStickerList},
     guild::{GetDiscordAuditLog, GetDiscordGuildInfo, GetDiscordGuildList, ModifyDiscordGuild},
@@ -14,28 +16,27 @@ use nekoai_tools::discord::{
         KickDiscordMember, ModifyDiscordMember, TimeoutDiscordMember, UnbanDiscordMember,
     },
     message::{
-        AddDiscordReaction, BulkDeleteDiscordMessages, DeleteDiscordMessage,
-        EditDiscordMessage, GetDiscordMessage, GetDiscordMessageHistory,
-        PinDiscordMessage, RemoveDiscordReaction, SendDiscordMessage,
-        UnpinDiscordMessage,
+        AddDiscordReaction, BulkDeleteDiscordMessages, DeleteDiscordMessage, EditDiscordMessage,
+        GetDiscordMessage, GetDiscordMessageHistory, PinDiscordMessage, RemoveDiscordReaction,
+        SendDiscordMessage, UnpinDiscordMessage,
     },
     role::{
         AddDiscordRoleToMember, CreateDiscordRole, DeleteDiscordRole, GetDiscordRoleList,
         ModifyDiscordRole, RemoveDiscordRoleFromMember,
     },
     schedule::{
-        CreateDiscordScheduledEvent, DeleteDiscordScheduledEvent,
-        GetDiscordScheduledEvents, ModifyDiscordScheduledEvent,
+        CreateDiscordScheduledEvent, DeleteDiscordScheduledEvent, GetDiscordScheduledEvents,
+        ModifyDiscordScheduledEvent,
     },
-    thread::{AddDiscordThreadMember, CreateDiscordThread, DeleteDiscordThread, GetDiscordThreadList},
+    thread::{
+        AddDiscordThreadMember, CreateDiscordThread, DeleteDiscordThread, GetDiscordThreadList,
+    },
     voice::{
         DeafenDiscordMember, DisconnectDiscordMemberVoice, MoveDiscordMemberVoice,
         MuteDiscordMember,
     },
 };
-use serenity::http::Http;
-use serenity::prelude::*;
-use std::sync::Arc;
+use serenity::{http::Http, prelude::*};
 use tracing::info;
 
 use crate::handler::Handler;

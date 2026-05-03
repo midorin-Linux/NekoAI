@@ -4,18 +4,18 @@
 //! Each tool implements the [`rig::tool::Tool`] trait, allowing it to be used
 //! by Rig agents.
 
-pub mod error;
-pub(crate) mod helpers;
 pub mod channel;
+pub mod emoji;
+pub mod error;
 pub mod guild;
+pub(crate) mod helpers;
+pub mod invite;
+pub mod member;
 pub mod message;
 pub mod role;
-pub mod member;
+pub mod schedule;
 pub mod thread;
 pub mod voice;
-pub mod invite;
-pub mod emoji;
-pub mod schedule;
 
 pub use error::DiscordToolError;
 pub use message::{SendDiscordMessage, SendMessageArgs, SendMessageOutput};

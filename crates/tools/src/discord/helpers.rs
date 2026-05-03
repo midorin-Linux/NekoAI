@@ -1,10 +1,11 @@
+use std::str::FromStr;
+
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use serenity::all::{
     AutoArchiveDuration, ChannelId, ChannelType, Colour, GuildId, MessageId, ReactionType,
     ScheduledEventStatus, ScheduledEventType, Timestamp, UserId,
 };
-use std::str::FromStr;
 
 pub fn ok(data: Value) -> Value {
     json!({ "ok": true, "data": data })
@@ -175,7 +176,9 @@ pub fn parse_scheduled_event_status(value: &Value) -> Option<ScheduledEventStatu
 }
 
 pub fn parse_timestamp(value: &Value) -> Option<Timestamp> {
-    value.as_str().and_then(|value| Timestamp::parse(value).ok())
+    value
+        .as_str()
+        .and_then(|value| Timestamp::parse(value).ok())
 }
 
 pub fn parse_colour(value: &Value) -> Option<Colour> {

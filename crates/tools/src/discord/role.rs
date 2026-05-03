@@ -1,14 +1,18 @@
 use std::sync::Arc;
 
-use rig::completion::ToolDefinition;
-use rig::tool::Tool;
-use serde_json::{json, Value};
-use serenity::all::{EditRole, Permissions, RoleId};
-use serenity::http::Http;
+use rig::{completion::ToolDefinition, tool::Tool};
+use serde_json::{Value, json};
+use serenity::{
+    all::{EditRole, Permissions, RoleId},
+    http::Http,
+};
 
 use crate::discord::{
     error::DiscordToolError,
-    helpers::{err, get_bool, get_guild_id_default, get_string, get_u64, get_user_id, ok, parse_colour, to_value},
+    helpers::{
+        err, get_bool, get_guild_id_default, get_string, get_u64, get_user_id, ok, parse_colour,
+        to_value,
+    },
 };
 
 pub struct GetDiscordRoleList {
@@ -36,27 +40,39 @@ pub struct RemoveDiscordRoleFromMember {
 }
 
 impl GetDiscordRoleList {
-    pub fn new(http: Arc<Http>) -> Self { Self { http } }
+    pub fn new(http: Arc<Http>) -> Self {
+        Self { http }
+    }
 }
 
 impl CreateDiscordRole {
-    pub fn new(http: Arc<Http>) -> Self { Self { http } }
+    pub fn new(http: Arc<Http>) -> Self {
+        Self { http }
+    }
 }
 
 impl DeleteDiscordRole {
-    pub fn new(http: Arc<Http>) -> Self { Self { http } }
+    pub fn new(http: Arc<Http>) -> Self {
+        Self { http }
+    }
 }
 
 impl ModifyDiscordRole {
-    pub fn new(http: Arc<Http>) -> Self { Self { http } }
+    pub fn new(http: Arc<Http>) -> Self {
+        Self { http }
+    }
 }
 
 impl AddDiscordRoleToMember {
-    pub fn new(http: Arc<Http>) -> Self { Self { http } }
+    pub fn new(http: Arc<Http>) -> Self {
+        Self { http }
+    }
 }
 
 impl RemoveDiscordRoleFromMember {
-    pub fn new(http: Arc<Http>) -> Self { Self { http } }
+    pub fn new(http: Arc<Http>) -> Self {
+        Self { http }
+    }
 }
 
 impl Tool for GetDiscordRoleList {
@@ -78,7 +94,9 @@ impl Tool for GetDiscordRoleList {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let Some(guild_id) = get_guild_id_default(&args) else { return Ok(err("guild_id is required")); };
+        let Some(guild_id) = get_guild_id_default(&args) else {
+            return Ok(err("guild_id is required"));
+        };
         match guild_id.roles(&self.http).await {
             Ok(roles) => {
                 let role_list = roles.values().cloned().collect::<Vec<_>>();
@@ -115,7 +133,9 @@ impl Tool for CreateDiscordRole {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let Some(guild_id) = get_guild_id_default(&args) else { return Ok(err("guild_id is required")); };
+        let Some(guild_id) = get_guild_id_default(&args) else {
+            return Ok(err("guild_id is required"));
+        };
 
         let name = get_string(&args, "name").unwrap_or_else(|| "New Role".to_string());
         let permissions = get_u64(&args, "permissions").unwrap_or(0);
@@ -128,7 +148,11 @@ impl Tool for CreateDiscordRole {
             .permissions(Permissions::from_bits_truncate(permissions))
             .hoist(hoist)
             .mentionable(mentionable);
-        let builder = if let Some(color) = color { builder.colour(color) } else { builder };
+        let builder = if let Some(color) = color {
+            builder.colour(color)
+        } else {
+            builder
+        };
 
         match guild_id.create_role(&self.http, builder).await {
             Ok(role) => Ok(ok(to_value(&role))),
@@ -159,8 +183,12 @@ impl Tool for DeleteDiscordRole {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let Some(guild_id) = get_guild_id_default(&args) else { return Ok(err("guild_id is required")); };
-        let Some(role_id) = get_u64(&args, "role_id").map(RoleId::new) else { return Ok(err("role_id is required")); };
+        let Some(guild_id) = get_guild_id_default(&args) else {
+            return Ok(err("guild_id is required"));
+        };
+        let Some(role_id) = get_u64(&args, "role_id").map(RoleId::new) else {
+            return Ok(err("role_id is required"));
+        };
 
         match guild_id.delete_role(&self.http, role_id).await {
             Ok(()) => Ok(ok(json!({ "deleted": true }))),
@@ -196,22 +224,40 @@ impl Tool for ModifyDiscordRole {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let Some(guild_id) = get_guild_id_default(&args) else { return Ok(err("guild_id is required")); };
-        let Some(role_id) = get_u64(&args, "role_id").map(RoleId::new) else { return Ok(err("role_id is required")); };
+        let Some(guild_id) = get_guild_id_default(&args) else {
+            return Ok(err("guild_id is required"));
+        };
+        let Some(role_id) = get_u64(&args, "role_id").map(RoleId::new) else {
+            return Ok(err("role_id is required"));
+        };
 
         let mut builder = EditRole::new();
         let mut changed = false;
 
-        if let Some(name) = get_string(&args, "name") { builder = builder.name(name); changed = true; }
+        if let Some(name) = get_string(&args, "name") {
+            builder = builder.name(name);
+            changed = true;
+        }
         if let Some(permissions) = get_u64(&args, "permissions") {
             builder = builder.permissions(Permissions::from_bits_truncate(permissions));
             changed = true;
         }
-        if let Some(color) = args.get("color").and_then(parse_colour) { builder = builder.colour(color); changed = true; }
-        if let Some(hoist) = get_bool(&args, "hoist") { builder = builder.hoist(hoist); changed = true; }
-        if let Some(mentionable) = get_bool(&args, "mentionable") { builder = builder.mentionable(mentionable); changed = true; }
+        if let Some(color) = args.get("color").and_then(parse_colour) {
+            builder = builder.colour(color);
+            changed = true;
+        }
+        if let Some(hoist) = get_bool(&args, "hoist") {
+            builder = builder.hoist(hoist);
+            changed = true;
+        }
+        if let Some(mentionable) = get_bool(&args, "mentionable") {
+            builder = builder.mentionable(mentionable);
+            changed = true;
+        }
 
-        if !changed { return Ok(err("No role fields provided to modify")); }
+        if !changed {
+            return Ok(err("No role fields provided to modify"));
+        }
 
         match guild_id.edit_role(&self.http, role_id, builder).await {
             Ok(role) => Ok(ok(to_value(&role))),
@@ -243,9 +289,15 @@ impl Tool for AddDiscordRoleToMember {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let Some(guild_id) = get_guild_id_default(&args) else { return Ok(err("guild_id is required")); };
-        let Some(user_id) = get_user_id(&args, "user_id") else { return Ok(err("user_id is required")); };
-        let Some(role_id) = get_u64(&args, "role_id").map(RoleId::new) else { return Ok(err("role_id is required")); };
+        let Some(guild_id) = get_guild_id_default(&args) else {
+            return Ok(err("guild_id is required"));
+        };
+        let Some(user_id) = get_user_id(&args, "user_id") else {
+            return Ok(err("user_id is required"));
+        };
+        let Some(role_id) = get_u64(&args, "role_id").map(RoleId::new) else {
+            return Ok(err("role_id is required"));
+        };
 
         match guild_id.member(&self.http, user_id).await {
             Ok(member) => match member.add_role(&self.http, role_id).await {
@@ -280,9 +332,15 @@ impl Tool for RemoveDiscordRoleFromMember {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let Some(guild_id) = get_guild_id_default(&args) else { return Ok(err("guild_id is required")); };
-        let Some(user_id) = get_user_id(&args, "user_id") else { return Ok(err("user_id is required")); };
-        let Some(role_id) = get_u64(&args, "role_id").map(RoleId::new) else { return Ok(err("role_id is required")); };
+        let Some(guild_id) = get_guild_id_default(&args) else {
+            return Ok(err("guild_id is required"));
+        };
+        let Some(user_id) = get_user_id(&args, "user_id") else {
+            return Ok(err("user_id is required"));
+        };
+        let Some(role_id) = get_u64(&args, "role_id").map(RoleId::new) else {
+            return Ok(err("role_id is required"));
+        };
 
         match guild_id.member(&self.http, user_id).await {
             Ok(member) => match member.remove_role(&self.http, role_id).await {

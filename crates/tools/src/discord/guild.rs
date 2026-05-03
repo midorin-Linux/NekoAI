@@ -1,16 +1,18 @@
 use std::sync::Arc;
 
-use rig::completion::ToolDefinition;
-use rig::tool::Tool;
-use serde_json::{json, Value};
-use serenity::all::{
-    audit_log::Action, AuditLogEntryId, CreateAttachment, EditGuild, GuildId,
+use rig::{completion::ToolDefinition, tool::Tool};
+use serde_json::{Value, json};
+use serenity::{
+    all::{AuditLogEntryId, CreateAttachment, EditGuild, GuildId, audit_log::Action},
+    http::{GuildPagination, Http},
 };
-use serenity::http::{GuildPagination, Http};
 
 use crate::discord::{
     error::DiscordToolError,
-    helpers::{err, get_bool, get_guild_id_default, get_string, get_u32, get_u64, get_u8, get_user_id, ok, to_value},
+    helpers::{
+        err, get_bool, get_guild_id_default, get_string, get_u8, get_u32, get_u64, get_user_id, ok,
+        to_value,
+    },
 };
 
 pub struct GetDiscordGuildInfo {
@@ -217,12 +219,14 @@ impl Tool for GetDiscordAuditLog {
         };
 
         let limit = get_u8(&args, "limit");
-        let action_type = get_u32(&args, "action_type")
-            .map(|v| Action::from_value(v as u8));
+        let action_type = get_u32(&args, "action_type").map(|v| Action::from_value(v as u8));
         let user_id = get_user_id(&args, "user_id");
         let before = get_u64(&args, "before").map(AuditLogEntryId::new);
 
-        match guild_id.audit_logs(&self.http, action_type, user_id, before, limit).await {
+        match guild_id
+            .audit_logs(&self.http, action_type, user_id, before, limit)
+            .await
+        {
             Ok(log) => Ok(ok(to_value(&log))),
             Err(error) => Ok(err(format!("Failed to fetch audit log: {error}"))),
         }

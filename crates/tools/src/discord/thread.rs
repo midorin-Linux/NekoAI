@@ -1,28 +1,50 @@
 use std::sync::Arc;
 
-use rig::completion::ToolDefinition;
-use rig::tool::Tool;
-use serde_json::{json, Value};
-use serenity::all::CreateThread;
-use serenity::http::Http;
+use rig::{completion::ToolDefinition, tool::Tool};
+use serde_json::{Value, json};
+use serenity::{all::CreateThread, http::Http};
 
 use crate::discord::{
     error::DiscordToolError,
     helpers::{
-        err, get_bool, get_channel_id, get_guild_id_default, get_message_id, get_string,
-        get_u16, get_user_id, ok, parse_auto_archive_duration, parse_thread_type, to_value,
+        err, get_bool, get_channel_id, get_guild_id_default, get_message_id, get_string, get_u16,
+        get_user_id, ok, parse_auto_archive_duration, parse_thread_type, to_value,
     },
 };
 
-pub struct CreateDiscordThread { http: Arc<Http> }
-pub struct DeleteDiscordThread { http: Arc<Http> }
-pub struct GetDiscordThreadList { http: Arc<Http> }
-pub struct AddDiscordThreadMember { http: Arc<Http> }
+pub struct CreateDiscordThread {
+    http: Arc<Http>,
+}
+pub struct DeleteDiscordThread {
+    http: Arc<Http>,
+}
+pub struct GetDiscordThreadList {
+    http: Arc<Http>,
+}
+pub struct AddDiscordThreadMember {
+    http: Arc<Http>,
+}
 
-impl CreateDiscordThread { pub fn new(http: Arc<Http>) -> Self { Self { http } } }
-impl DeleteDiscordThread { pub fn new(http: Arc<Http>) -> Self { Self { http } } }
-impl GetDiscordThreadList { pub fn new(http: Arc<Http>) -> Self { Self { http } } }
-impl AddDiscordThreadMember { pub fn new(http: Arc<Http>) -> Self { Self { http } } }
+impl CreateDiscordThread {
+    pub fn new(http: Arc<Http>) -> Self {
+        Self { http }
+    }
+}
+impl DeleteDiscordThread {
+    pub fn new(http: Arc<Http>) -> Self {
+        Self { http }
+    }
+}
+impl GetDiscordThreadList {
+    pub fn new(http: Arc<Http>) -> Self {
+        Self { http }
+    }
+}
+impl AddDiscordThreadMember {
+    pub fn new(http: Arc<Http>) -> Self {
+        Self { http }
+    }
+}
 
 impl Tool for CreateDiscordThread {
     const NAME: &'static str = "create_discord_thread";
@@ -51,18 +73,37 @@ impl Tool for CreateDiscordThread {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let Some(channel_id) = get_channel_id(&args, "channel_id") else { return Ok(err("channel_id is required")); };
-        let Some(name) = get_string(&args, "name") else { return Ok(err("name is required")); };
+        let Some(channel_id) = get_channel_id(&args, "channel_id") else {
+            return Ok(err("channel_id is required"));
+        };
+        let Some(name) = get_string(&args, "name") else {
+            return Ok(err("name is required"));
+        };
 
         let mut builder = CreateThread::new(name);
-        if let Some(kind) = args.get("kind").and_then(parse_thread_type) { builder = builder.kind(kind); }
-        if let Some(duration) = args.get("auto_archive_duration").and_then(parse_auto_archive_duration) { builder = builder.auto_archive_duration(duration); }
-        if let Some(rate_limit) = get_u16(&args, "rate_limit_per_user") { builder = builder.rate_limit_per_user(rate_limit); }
-        if let Some(invitable) = get_bool(&args, "invitable") { builder = builder.invitable(invitable); }
+        if let Some(kind) = args.get("kind").and_then(parse_thread_type) {
+            builder = builder.kind(kind);
+        }
+        if let Some(duration) = args
+            .get("auto_archive_duration")
+            .and_then(parse_auto_archive_duration)
+        {
+            builder = builder.auto_archive_duration(duration);
+        }
+        if let Some(rate_limit) = get_u16(&args, "rate_limit_per_user") {
+            builder = builder.rate_limit_per_user(rate_limit);
+        }
+        if let Some(invitable) = get_bool(&args, "invitable") {
+            builder = builder.invitable(invitable);
+        }
 
         let message_id = get_message_id(&args, "message_id");
         let result = match message_id {
-            Some(message_id) => channel_id.create_thread_from_message(&self.http, message_id, builder).await,
+            Some(message_id) => {
+                channel_id
+                    .create_thread_from_message(&self.http, message_id, builder)
+                    .await
+            }
             None => channel_id.create_thread(&self.http, builder).await,
         };
 
@@ -92,7 +133,9 @@ impl Tool for DeleteDiscordThread {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let Some(thread_id) = get_channel_id(&args, "thread_id") else { return Ok(err("thread_id is required")); };
+        let Some(thread_id) = get_channel_id(&args, "thread_id") else {
+            return Ok(err("thread_id is required"));
+        };
         match thread_id.delete(&self.http).await {
             Ok(channel) => Ok(ok(to_value(&channel))),
             Err(error) => Ok(err(format!("Failed to delete thread: {error}"))),
@@ -119,7 +162,9 @@ impl Tool for GetDiscordThreadList {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let Some(guild_id) = get_guild_id_default(&args) else { return Ok(err("guild_id is required")); };
+        let Some(guild_id) = get_guild_id_default(&args) else {
+            return Ok(err("guild_id is required"));
+        };
         match guild_id.get_active_threads(&self.http).await {
             Ok(threads) => Ok(ok(to_value(&threads))),
             Err(error) => Ok(err(format!("Failed to fetch threads: {error}"))),
@@ -149,8 +194,12 @@ impl Tool for AddDiscordThreadMember {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let Some(thread_id) = get_channel_id(&args, "thread_id") else { return Ok(err("thread_id is required")); };
-        let Some(user_id) = get_user_id(&args, "user_id") else { return Ok(err("user_id is required")); };
+        let Some(thread_id) = get_channel_id(&args, "thread_id") else {
+            return Ok(err("thread_id is required"));
+        };
+        let Some(user_id) = get_user_id(&args, "user_id") else {
+            return Ok(err("user_id is required"));
+        };
         match thread_id.add_thread_member(&self.http, user_id).await {
             Ok(()) => Ok(ok(json!({ "added": true }))),
             Err(error) => Ok(err(format!("Failed to add thread member: {error}"))),
