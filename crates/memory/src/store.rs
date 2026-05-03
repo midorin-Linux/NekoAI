@@ -132,7 +132,7 @@ impl MemoryStore {
         }
     }
 
-    pub async fn initialize(&self) -> anyhow::Result<()> {
+    pub async fn initialize(&self) -> Result<()> {
         let dim = self.embedder.dimension();
         self.mid_term.ensure_collection(dim).await?;
         self.long_term.ensure_collection(dim).await?;
@@ -193,7 +193,7 @@ impl MemoryStore {
         &self,
         session_key: &SessionKey,
         summary: String,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let messages = self.short_term_memory.get_messages(session_key);
 
         self.mid_term
@@ -211,7 +211,7 @@ impl MemoryStore {
         session_key: &SessionKey,
         user_id: Option<&str>,
         facts: Vec<(String, Vec<String>)>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let fact_count = facts.len();
         for (fact, tags) in facts {
             self.long_term

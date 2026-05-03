@@ -195,7 +195,7 @@ impl AgentRuntime {
             summarization_model_parameters,
             extraction_tx,
             tool_server_handle,
-            summarizing
+            summarizing,
         })
     }
 
@@ -220,18 +220,18 @@ impl AgentRuntime {
                             .await
                         {
                             warn!(
-                            session = %session_key.channel_id,
-                            error = %error,
-                            "failed to store mid-term summary during clear"
-                        );
+                                session = %session_key.channel_id,
+                                error = %error,
+                                "failed to store mid-term summary during clear"
+                            );
                         }
                     }
                     Err(error) => {
                         warn!(
-                        session = %session_key.channel_id,
-                        error = %error,
-                        "failed to generate mid-term summary during clear"
-                    );
+                            session = %session_key.channel_id,
+                            error = %error,
+                            "failed to generate mid-term summary during clear"
+                        );
                     }
                 }
             });
@@ -337,7 +337,10 @@ impl AgentRuntime {
         }
         debug!("session history updated");
 
-        let conversation = format!("<user_content>{}<user_content>\n<assistant_content>{}<assistant_content>\n", user_input, result);
+        let conversation = format!(
+            "<user_content>{}<user_content>\n<assistant_content>{}<assistant_content>\n",
+            user_input, result
+        );
         self.spawn_long_term_extraction(session_key.clone(), user_id, conversation);
 
         Ok(AgentResponse { content: result })

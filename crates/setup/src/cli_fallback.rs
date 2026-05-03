@@ -1,4 +1,7 @@
-use nekoai_config::loader::{ChatPlatform, Config, ConversationModel, Discord, EmbeddingModel, Memory, Parameters, Provider, SecretKey, SummarizerModel, ToolPermissions, VectorDb};
+use nekoai_config::loader::{
+    ChatPlatform, Config, ConversationModel, Discord, EmbeddingModel, Memory, Parameters, Provider,
+    SecretKey, SummarizerModel, ToolPermissions, VectorDb,
+};
 
 /// Build a Config from explicitly provided CLI arguments.
 /// Missing optional fields use sensible defaults.

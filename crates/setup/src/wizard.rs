@@ -61,7 +61,8 @@ pub fn run_wizard() -> Result<Config> {
     );
     println!(
         "  {}",
-        "  The summarizer model (can be a cheaper/faster one) handles memory summarization.".dimmed()
+        "  The summarizer model (can be a cheaper/faster one) handles memory summarization."
+            .dimmed()
     );
     println!();
     let model_name: String = Input::with_theme(&SimpleTheme)

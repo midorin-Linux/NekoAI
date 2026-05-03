@@ -73,8 +73,11 @@ fn merge_with_existing(new_config: &Config) -> Result<Config> {
         .provider_base_url
         .is_empty()
     {
-        merged.provider.conversation_model.provider_base_url =
-            existing.provider.conversation_model.provider_base_url.clone();
+        merged.provider.conversation_model.provider_base_url = existing
+            .provider
+            .conversation_model
+            .provider_base_url
+            .clone();
     }
 
     // Provider (summarizer model): keep existing API key if not placeholder
