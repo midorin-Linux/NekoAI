@@ -1,10 +1,12 @@
 use anyhow::{Result, bail};
+use clap::ArgMatches;
 use colored::Colorize;
 use dialoguer::{Input, theme::SimpleTheme};
 use indicatif::{ProgressBar, ProgressStyle};
 use nekoai_config::loader::Config;
 use nekoai_infra::logging::{WorkerGuard, init_tracing};
 use nekoai_memory::store::MemoryStore;
+use nekoai_setup::{config_exists, config_from_env, has_env_token, run_setup_wizard};
 use tokio::time::sleep;
 use tracing::{error, info, warn};
 
@@ -15,8 +17,8 @@ pub struct StartCommand {
 }
 
 impl StartCommand {
-    pub async fn new() -> Result<Self> {
-        let (config, guard, memory_store) = Self::start().await?;
+    pub async fn new(sub_matches: &ArgMatches) -> Result<Self> {
+        let (config, guard, memory_store) = Self::start(sub_matches).await?;
 
         Ok(Self {
             config,
@@ -25,7 +27,7 @@ impl StartCommand {
         })
     }
 
-    pub async fn start() -> Result<(Config, WorkerGuard, MemoryStore)> {
+    pub async fn start(sub_matches: &ArgMatches) -> Result<(Config, WorkerGuard, MemoryStore)> {
         println!();
         println!("  ███╗   ██╗ ███████╗ ██╗  ██╗  ██████╗       █████╗  ██╗");
         println!("  ████╗  ██║ ██╔════╝ ██║ ██╔╝ ██╔═══██╗     ██╔══██╗ ██║");
@@ -72,16 +74,91 @@ impl StartCommand {
 
         info!("Checking for configuration file");
 
-        match std::fs::exists(".config/config.json") {
-            Ok(false) => {
-                spinner.finish_and_clear();
+        let config = if config_exists() {
+            info!("Configuration file found at .config/config.json");
+            spinner.finish_and_clear();
+            println!("    {} Configuration file found", "✓".green());
 
-                warn!("No configuration file found at .config/config.json");
-                println!("    {} No configuration found\n", "✗".red());
-                println!(
-                    "    It's likely that this is the first time the program is running, or the configuration file has been deleted."
-                );
+            // Load existing config
+            Config::load()
+                .inspect_err(|_e| {
+                    spinner.finish_and_clear();
+                })
+                .inspect(|_| spinner.finish_and_clear())
+                .map_err(|e| {
+                    error!("Failed to load configuration: {}", e);
+                    println!("    {} Failed to load configuration: {}", "✗".red(), e);
+                    e
+                })
+                .inspect(|_| {
+                    info!("Configuration loaded successfully");
+                    println!("    {} Configuration loaded", "✓".green());
+                })?
+        } else {
+            spinner.finish_and_clear();
 
+            warn!("No configuration file found at .config/config.json");
+            println!("    {} No configuration found\n", "✗".red());
+            println!(
+                "    It's likely that this is the first time the program is running, or the configuration file has been deleted."
+            );
+
+            // Determine setup path
+            let skip_setup = sub_matches.get_flag("skip-setup");
+            if skip_setup || has_env_token() {
+                // CLI fallback mode: skip interactive wizard
+                if has_env_token() {
+                    info!("DISCORD_AGENT_TOKEN environment variable found, skipping setup wizard");
+                    println!(
+                        "    {} DISCORD_AGENT_TOKEN detected, using environment",
+                        "i".cyan()
+                    );
+
+                    if let Some(cfg) = config_from_env() {
+                        info!("configuration built from environment variables");
+                        cfg
+                    } else {
+                        bail!("failed to build config from DISCORD_AGENT_TOKEN");
+                    }
+                } else {
+                    info!("--skip-setup flag provided, using CLI arguments");
+
+                    let token = sub_matches
+                        .get_one::<String>("token")
+                        .cloned()
+                        .unwrap_or_else(|| {
+                            warn!("no --token provided with --skip-setup");
+                            String::new()
+                        });
+
+                    if token.is_empty() {
+                        bail!("--token is required when using --skip-setup");
+                    }
+
+                    let provider = sub_matches
+                        .get_one::<String>("provider")
+                        .cloned()
+                        .unwrap_or_default();
+
+                    let model = sub_matches
+                        .get_one::<String>("model")
+                        .cloned()
+                        .unwrap_or_default();
+
+                    let cfg = nekoai_setup::cli_fallback::make_config(&token, &provider, &model);
+                    info!(
+                        "configuration built from CLI arguments (provider: {}, model: {})",
+                        if provider.is_empty() {
+                            "default"
+                        } else {
+                            &provider
+                        },
+                        if model.is_empty() { "default" } else { &model }
+                    );
+                    cfg
+                }
+            } else {
+                // Interactive setup wizard
                 loop {
                     let response: String = Input::with_theme(&SimpleTheme)
                         .with_prompt("    Do you want to run the setup wizard to create a new configuration? [y/n]")
@@ -102,32 +179,12 @@ impl StartCommand {
                     }
                 }
 
-                // セットアップウィザードを起動
                 info!("Running setup wizard to create new configuration");
+                let cfg = run_setup_wizard().await?;
+                info!("setup wizard completed, configuration saved");
+                cfg
             }
-            Ok(true) => {
-                info!("Configuration file found at .config/config.json");
-            }
-            Err(e) => {
-                spinner.finish_and_clear();
-                bail!("failed to check config file existence: {e}");
-            }
-        }
-
-        let config = Config::load()
-            .inspect_err(|_e| {
-                spinner.finish_and_clear();
-            })
-            .inspect(|_| spinner.finish_and_clear())
-            .map_err(|e| {
-                error!("Failed to load configuration: {}", e);
-                println!("    {} Failed to load configuration: {}", "✗".red(), e);
-                e
-            })
-            .inspect(|_| {
-                info!("Configuration loaded successfully");
-                println!("    {} Configuration loaded", "✓".green());
-            })?;
+        };
 
         let spinner = ProgressBar::new_spinner();
         spinner.set_style(

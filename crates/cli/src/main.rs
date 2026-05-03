@@ -16,7 +16,34 @@ fn cli() -> Command {
         .subcommand_required(true)
         .arg_required_else_help(true)
         .allow_external_subcommands(true)
-        .subcommand(Command::new("start").about("Start NekoAI"))
+        .subcommand(
+            Command::new("start")
+                .about("Start NekoAI")
+                .arg(
+                    clap::Arg::new("skip-setup")
+                        .long("skip-setup")
+                        .help("Skip the setup wizard even if no config file exists")
+                        .action(clap::ArgAction::SetTrue),
+                )
+                .arg(
+                    clap::Arg::new("token")
+                        .long("token")
+                        .help("Discord Bot Token (used with --skip-setup)")
+                        .num_args(1),
+                )
+                .arg(
+                    clap::Arg::new("provider")
+                        .long("provider")
+                        .help("AI provider (anthropic, openai, custom; used with --skip-setup)")
+                        .num_args(1),
+                )
+                .arg(
+                    clap::Arg::new("model")
+                        .long("model")
+                        .help("Model name (used with --skip-setup)")
+                        .num_args(1),
+                ),
+        )
 }
 
 #[tokio::main]
@@ -35,8 +62,8 @@ async fn run() -> Result<()> {
     let matches = cli().get_matches();
 
     match matches.subcommand() {
-        Some(("start", _sub_matches)) => {
-            let start_command = commands::start::StartCommand::new().await?;
+        Some(("start", sub_matches)) => {
+            let start_command = commands::start::StartCommand::new(sub_matches).await?;
 
             info!("start command initialized");
 

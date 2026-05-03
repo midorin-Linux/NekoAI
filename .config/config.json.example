@@ -1,0 +1,36 @@
+{
+  "discord": {
+    "token": "YOUR_DISCORD_BOT_TOKEN",
+    "guild_id": 1234567890
+  },
+  "provider": {
+    "language_model": {
+      "provider_base_url": "https://api.openai.com/v1",
+      "api_key": "YOUR_API_KEY",
+      "model_name": "gpt-4o",
+      "parameters": {
+        "max_token": 262144,
+        "temperature": 1.0,
+        "top_p": 0.95
+      }
+    },
+    "embedding_model": {
+      "provider_base_url": "https://api.openai.com/v1",
+      "api_key": "YOUR_API_KEY",
+      "model_name": "text-embedding-3-small",
+      "dimension": 1536
+    }
+  },
+  "memory": {
+    "vector_db": {
+      "url": "http://localhost:6334",
+      "api_key": "",
+      "mid_term_collection": "mid_term",
+      "long_term_collection": "long_term"
+    },
+    "short_term_max_entries": 20,
+    "mid_term_top_k": 3,
+    "long_term_top_k": 5,
+    "mid_term_retention_days": 30
+  }
+}

@@ -12,12 +12,15 @@ NekoAIはRustで開発されているDiscord用AIエージェントです。Rig 
 - エントリポイント・コマンドラインインターフェース
 - `start`コマンドでエージェントを起動
 - 設定ファイルの存在確認とセットアップウィザードの起動
+- `--skip-setup` / `--token` / `--provider` / `--model` 引数の受け付け
 - チャットクライアント（Discord）の初期化と実行
 
 ### config (nekoai-config)
-- 設定ファイルのロード・検証
-- 設定スキーマ定義（Discord、プロバイダ、メモリ設定など）
+- 設定ファイルのロード・検証（JSON形式）
+- 設定スキーマ定義（Discord、プロバイダ、メモリ設定、ツール権限など）
 - `.config/config.json`からの設定読み込み
+- Serialize/Deserialize の両方をサポート
+- SecretKey: 文字列出力時にマスク表示する安全なキー型
 
 ### discord (nekoai-discord)
 - SerenityによるDiscordイベント処理・コマンドルーティング
@@ -46,6 +49,13 @@ NekoAIはRustで開発されているDiscord用AIエージェントです。Rig 
 ### domain (nekoai-domain)
 - ビジネスロジック・共通のデータ型定義
 - SessionKey、SessionKindの定義
+
+### setup (nekoai-setup)
+- 初回セットアップウィザード (dialoguer ベース、4ステップ)
+- 設定ファイルの新規作成・既存ファイルとの差分マージ（既存値を優先）
+- CLI fallback モード（環境変数 DISCORD_AGENT_TOKEN / --skip-setup フラグ）
+- `config_writer`: 設定ファイルの JSON 保存とマージロジック
+- `cli_fallback`: コマンドライン引数から Config を構築
 
 ### tools (nekoai-tools)
 - ツールレジストリ・実行・権限管理（現在は空のクレート）
@@ -96,7 +106,7 @@ cargo clippy -- -D warnings  # リンター
 1. **設定ファイルのパス**：`.config/config.json`をルートディレクトリに期待
 2. **Qdrant接続**：デフォルトで`http://localhost:6334`に接続
 3. **ツールシステム**：現在は空のクレートで、実装待ち
-4. **セットアップウィザード**：TUIベースのセットアップが計画されているが、現在はCLIフォールバックのみ
+4. ~~セットアップウィザード：TUIベースのセットアップが計画されているが、現在はCLIフォールバックのみ~~ → 実装済み（dialoguer ベースの4ステップウィザード + CLI fallback）
 
 ## データフロー
 

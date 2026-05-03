@@ -2,16 +2,16 @@ use std::fmt;
 
 use anyhow::Result;
 use config::{Config as ConfigBuilder, ConfigError, File};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Discord {
     pub token: SecretKey,
     pub guild_id: u64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[derive(Default)]
 pub enum ChatPlatform {
@@ -19,14 +19,39 @@ pub enum ChatPlatform {
     Discord,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Parameters {
+    #[serde(default = "default_max_token")]
     pub max_token: u64,
+    #[serde(default = "default_temperature")]
     pub temperature: f64,
+    #[serde(default = "default_top_p")]
     pub top_p: f64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+impl Default for Parameters {
+    fn default() -> Self {
+        Self {
+            max_token: default_max_token(),
+            temperature: default_temperature(),
+            top_p: default_top_p(),
+        }
+    }
+}
+
+const fn default_max_token() -> u64 {
+    262144
+}
+
+const fn default_temperature() -> f64 {
+    1.0
+}
+
+const fn default_top_p() -> f64 {
+    0.95
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LanguageModel {
     pub provider_base_url: String,
     pub api_key: SecretKey,
@@ -34,7 +59,7 @@ pub struct LanguageModel {
     pub parameters: Parameters,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmbeddingModel {
     pub provider_base_url: String,
     pub api_key: SecretKey,
@@ -42,13 +67,13 @@ pub struct EmbeddingModel {
     pub dimension: u64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Provider {
     pub language_model: LanguageModel,
     pub embedding_model: EmbeddingModel,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VectorDb {
     #[serde(default = "default_qdrant_url")]
     pub url: String,
@@ -71,7 +96,7 @@ impl Default for VectorDb {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Memory {
     #[serde(default)]
     pub vector_db: VectorDb,
@@ -97,7 +122,7 @@ impl Default for Memory {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     #[serde(default)]
     pub chat_platform: ChatPlatform,
@@ -105,6 +130,8 @@ pub struct Config {
     pub provider: Provider,
     #[serde(default)]
     pub memory: Memory,
+    #[serde(default)]
+    pub tools: ToolPermissions,
 }
 
 fn default_qdrant_url() -> String {
@@ -158,10 +185,14 @@ impl Config {
     }
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct SecretKey(String);
 
 impl SecretKey {
+    pub fn new(value: String) -> Self {
+        Self(value)
+    }
+
     pub fn expose(&self) -> &str {
         self.0.as_str()
     }
@@ -171,6 +202,14 @@ impl AsRef<str> for SecretKey {
     fn as_ref(&self) -> &str {
         self.expose()
     }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ToolPermissions {
+    #[serde(default)]
+    pub web_search: bool,
+    #[serde(default)]
+    pub code_exec: bool,
 }
 
 impl fmt::Debug for SecretKey {

@@ -16,6 +16,6 @@ nekoai-memory = { workspace = true }
 colored = { workspace = true }
 dialoguer = { workspace = true }
 indicatif = { workspace = true }
-#setup = { workspace = true }
+nekoai-setup = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

@@ -409,8 +409,11 @@ async fn extract_and_store_long_term_facts(
 
         async move {
             let extractor = provider.build_agent(model.as_str(), parameters).build();
-            let extracted = extractor.prompt(prompt).await.context("failed to prompt extraction agent")?;
-            
+            let extracted = extractor
+                .prompt(prompt)
+                .await
+                .context("failed to prompt extraction agent")?;
+
             match parse_extracted_facts(&extracted) {
                 Ok(facts) => Ok(facts),
                 Err(e) => {
@@ -510,13 +513,15 @@ fn parse_extracted_facts(raw: &str) -> Result<Vec<(String, Vec<String>)>> {
 }
 
 fn parse_extracted_facts_json(candidate: &str) -> Option<Vec<(String, Vec<String>)>> {
-    let parsed: Vec<ExtractedFact> = serde_json::from_str(candidate).map_err(|e| {
-        warn!(
-            error = %e,
-            candidate = candidate,
-            "failed to parse extracted facts JSON"
-        );
-    }).ok()?;
+    let parsed: Vec<ExtractedFact> = serde_json::from_str(candidate)
+        .map_err(|e| {
+            warn!(
+                error = %e,
+                candidate = candidate,
+                "failed to parse extracted facts JSON"
+            );
+        })
+        .ok()?;
     let facts = parsed
         .into_iter()
         .filter_map(|item| {

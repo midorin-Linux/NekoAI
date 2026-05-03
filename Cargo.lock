@@ -1826,6 +1826,7 @@ dependencies = [
  "nekoai-discord",
  "nekoai-infra",
  "nekoai-memory",
+ "nekoai-setup",
  "tokio",
  "tracing",
 ]
@@ -1895,6 +1896,18 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "nekoai-setup"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "colored",
+ "dialoguer",
+ "nekoai-config",
+ "serde_json",
+ "tracing",
 ]
 
 [[package]]

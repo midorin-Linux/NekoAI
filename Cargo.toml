@@ -7,7 +7,7 @@ members = [
     "crates/domain",
     "crates/infra",
     "crates/memory",
-#    "crates/setup",
+    "crates/setup",
     "crates/tools"
 ]
 resolver = "2"
@@ -25,7 +25,7 @@ nekoai-discord = { path = "crates/discord" }
 nekoai-domain = { path = "crates/domain" }
 nekoai-infra = { path = "crates/infra" }
 nekoai-memory = { path = "crates/memory" }
-#setup = { path = "crates/setup" }
+nekoai-setup = { path = "crates/setup" }
 nekoai-tools = { path = "crates/tools" }
 
 anyhow = "1.0.102"
