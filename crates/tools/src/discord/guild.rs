@@ -11,7 +11,7 @@ use crate::discord::{
     error::DiscordToolError,
     helpers::{
         err, get_bool, get_guild_id_default, get_string, get_u8, get_u32, get_u64, get_user_id, ok,
-        to_value,
+        retry_discord, to_value,
     },
 };
 
@@ -81,7 +81,13 @@ impl Tool for GetDiscordGuildInfo {
             return Ok(err("guild_id is required"));
         };
 
-        match guild_id.to_partial_guild(&self.http).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move { guild_id.to_partial_guild(&http).await }
+        })
+        .await
+        {
             Ok(guild) => Ok(ok(to_value(&guild))),
             Err(error) => Ok(err(format!("Failed to fetch guild info: {error}"))),
         }
@@ -113,9 +119,16 @@ impl Tool for GetDiscordGuildList {
         let limit = get_u64(&args, "limit");
         let after = get_u64(&args, "after");
 
-        let pagination = after.map(|guild_id| GuildPagination::After(GuildId::new(guild_id)));
-
-        match self.http.get_guilds(pagination, limit).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move {
+                let pagination = after.map(|guild_id| GuildPagination::After(GuildId::new(guild_id)));
+                http.get_guilds(pagination, limit).await
+            }
+        })
+        .await
+        {
             Ok(guilds) => Ok(ok(to_value(&guilds))),
             Err(error) => Ok(err(format!("Failed to fetch guild list: {error}"))),
         }
@@ -182,7 +195,14 @@ impl Tool for ModifyDiscordGuild {
             return Ok(err("No guild fields provided to modify"));
         }
 
-        match guild_id.edit(&self.http, builder).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            let builder = builder.clone();
+            async move { guild_id.edit(&http, builder).await }
+        })
+        .await
+        {
             Ok(guild) => Ok(ok(to_value(&guild))),
             Err(error) => Ok(err(format!("Failed to modify guild: {error}"))),
         }
@@ -224,9 +244,16 @@ impl Tool for GetDiscordAuditLog {
         let user_id = get_user_id(&args, "user_id");
         let before = get_u64(&args, "before").map(AuditLogEntryId::new);
 
-        match guild_id
-            .audit_logs(&self.http, action_type, user_id, before, limit)
-            .await
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move {
+                guild_id
+                    .audit_logs(&http, action_type, user_id, before, limit)
+                    .await
+            }
+        })
+        .await
         {
             Ok(log) => Ok(ok(to_value(&log))),
             Err(error) => Ok(err(format!("Failed to fetch audit log: {error}"))),

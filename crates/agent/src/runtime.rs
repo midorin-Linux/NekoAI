@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use dashmap::DashMap;
@@ -20,6 +21,8 @@ use rig::{
 };
 use serde::Deserialize;
 use tokio::sync::{Semaphore, mpsc};
+use tokio_retry::Retry;
+use tokio_retry::strategy::{ExponentialBackoff, jitter};
 use tracing::{debug, info, warn};
 
 use crate::{
@@ -278,16 +281,6 @@ impl AgentRuntime {
             .await;
         debug!(context_turns = context.turns.len(), "context built");
 
-        let agent = self
-            .conversation_model
-            .build_agent(
-                self.conversation_model_name.as_str(),
-                self.conversation_model_parameters.clone(),
-            )
-            .preamble(context.system_prompt.as_str())
-            .tool_server_handle(self.tool_server_handle.clone())
-            .build();
-
         let mut chat_history = Vec::with_capacity(context.turns.len() * 2);
         for turn in &context.turns {
             chat_history.push(Message::user(&turn.user));
@@ -300,10 +293,37 @@ impl AgentRuntime {
             "prompt composed"
         );
 
+        let retry_strategy = ExponentialBackoff::from_millis(100)
+            .max_delay(Duration::from_secs(10))
+            .map(jitter)
+            .take(5);
+
+        let cm = self.conversation_model.clone();
+        let model_name = self.conversation_model_name.clone();
+        let model_params = self.conversation_model_parameters.clone();
+        let system_prompt = context.system_prompt.clone();
+        let tool_handle = self.tool_server_handle.clone();
+        let user_message = context.user_message.clone();
+
         let result = with_caller_context(caller_context, async {
-            agent
-                .chat(context.user_message.as_str(), chat_history)
-                .await
+            Retry::spawn(retry_strategy, || {
+                let cm = cm.clone();
+                let mn = model_name.clone();
+                let mp = model_params.clone();
+                let sp = system_prompt.clone();
+                let th = tool_handle.clone();
+                let um = user_message.clone();
+                let ch = chat_history.clone();
+                async move {
+                    let agent = cm
+                        .build_agent(mn.as_str(), mp)
+                        .preamble(sp.as_str())
+                        .tool_server_handle(th)
+                        .build();
+                    agent.chat(&um, ch).await
+                }
+            })
+            .await
         })
         .await?;
         info!(response_len = result.len(), "received model response");
@@ -380,15 +400,26 @@ impl AgentRuntime {
             conversation
         );
 
-        let summarizer = self
-            .summarization_model
-            .build_agent(
-                self.summarization_model_name.as_str(),
-                self.summarization_model_parameters.clone(),
-            )
-            .build();
+        let retry_strategy = ExponentialBackoff::from_millis(100)
+            .max_delay(Duration::from_secs(10))
+            .map(jitter)
+            .take(5);
 
-        let summary = summarizer.prompt(prompt).await?;
+        let sm = self.summarization_model.clone();
+        let model_name = self.summarization_model_name.clone();
+        let model_params = self.summarization_model_parameters.clone();
+
+        let summary = Retry::spawn(retry_strategy, || {
+            let sm = sm.clone();
+            let mn = model_name.clone();
+            let mp = model_params.clone();
+            let p = prompt.clone();
+            async move {
+                let summarizer = sm.build_agent(mn.as_str(), mp).build();
+                summarizer.prompt(p).await
+            }
+        })
+        .await?;
         Ok(summary.trim().to_string())
     }
 
@@ -475,9 +506,12 @@ async fn extract_and_store_long_term_facts(
         escape_xml(&response)
     );
 
-    let retry_strategy = tokio_retry::strategy::FixedInterval::from_millis(1000).take(1);
+    let retry_strategy = ExponentialBackoff::from_millis(100)
+        .max_delay(Duration::from_secs(10))
+        .map(jitter)
+        .take(5);
 
-    let facts = tokio_retry::Retry::spawn(retry_strategy, || {
+    let facts = Retry::spawn(retry_strategy, || {
         let provider = provider.clone();
         let model = model.clone();
         let parameters = parameters.clone();

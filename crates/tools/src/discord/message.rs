@@ -17,7 +17,7 @@ use crate::discord::{
     error::DiscordToolError,
     helpers::{
         err, get_channel_id, get_message_id, get_string, get_u8, get_u64_list, get_user_id, ok,
-        parse_reaction_type, to_value,
+        parse_reaction_type, retry_discord, to_value,
     },
 };
 
@@ -102,7 +102,13 @@ impl Tool for SendDiscordMessage {
             "sending Discord message via tool"
         );
 
-        match channel_id.say(&self.http, &args.message).await {
+        match retry_discord(|| {
+            let http = self.http.clone();
+            let msg = args.message.clone();
+            async move { channel_id.say(&http, &msg).await }
+        })
+        .await
+        {
             Ok(message) => {
                 tracing::info!(
                     target: "nekoai-tools",
@@ -256,11 +262,15 @@ impl Tool for EditDiscordMessage {
             return Ok(err("content is required"));
         };
 
-        let builder = EditMessage::new().content(content);
-
-        match channel_id
-            .edit_message(&self.http, message_id, builder)
-            .await
+        match retry_discord(|| {
+            let http = self.http.clone();
+            let content = content.clone();
+            async move {
+                let builder = EditMessage::new().content(content);
+                channel_id.edit_message(&http, message_id, builder).await
+            }
+        })
+        .await
         {
             Ok(message) => Ok(ok(to_value(&message))),
             Err(error) => Ok(err(format!("Failed to edit message: {error}"))),
@@ -299,7 +309,12 @@ impl Tool for DeleteDiscordMessage {
             return Ok(err("message_id is required"));
         };
 
-        match channel_id.delete_message(&self.http, message_id).await {
+        match retry_discord(|| {
+            let http = self.http.clone();
+            async move { channel_id.delete_message(&http, message_id).await }
+        })
+        .await
+        {
             Ok(()) => Ok(ok(json!({ "deleted": true }))),
             Err(error) => Ok(err(format!("Failed to delete message: {error}"))),
         }
@@ -336,7 +351,12 @@ impl Tool for GetDiscordMessage {
             return Ok(err("message_id is required"));
         };
 
-        match channel_id.message(&self.http, message_id).await {
+        match retry_discord(|| {
+            let http = self.http.clone();
+            async move { channel_id.message(&http, message_id).await }
+        })
+        .await
+        {
             Ok(message) => Ok(ok(to_value(&message))),
             Err(error) => Ok(err(format!("Failed to fetch message: {error}"))),
         }
@@ -379,7 +399,13 @@ impl Tool for BulkDeleteDiscordMessages {
             .map(serenity::all::MessageId::new)
             .collect::<Vec<_>>();
 
-        match channel_id.delete_messages(&self.http, &message_ids).await {
+        match retry_discord(|| {
+            let http = self.http.clone();
+            let ids = message_ids.clone();
+            async move { channel_id.delete_messages(&http, &ids).await }
+        })
+        .await
+        {
             Ok(()) => Ok(ok(json!({ "deleted": message_ids.len() }))),
             Err(error) => Ok(err(format!("Failed to bulk delete messages: {error}"))),
         }
@@ -416,21 +442,33 @@ impl Tool for GetDiscordMessageHistory {
             return Ok(err("channel_id is required"));
         };
 
-        let mut builder = GetMessages::new();
-        if let Some(limit) = get_u8(&args, "limit") {
-            builder = builder.limit(limit);
-        }
-        if let Some(before) = get_message_id(&args, "before") {
-            builder = builder.before(before);
-        }
-        if let Some(after) = get_message_id(&args, "after") {
-            builder = builder.after(after);
-        }
-        if let Some(around) = get_message_id(&args, "around") {
-            builder = builder.around(around);
-        }
-
-        match channel_id.messages(&self.http, builder).await {
+        match retry_discord(|| {
+            let http = self.http.clone();
+            let (limit, before, after, around) = (
+                get_u8(&args, "limit"),
+                get_message_id(&args, "before"),
+                get_message_id(&args, "after"),
+                get_message_id(&args, "around"),
+            );
+            async move {
+                let mut b = GetMessages::new();
+                if let Some(v) = limit {
+                    b = b.limit(v);
+                }
+                if let Some(v) = before {
+                    b = b.before(v);
+                }
+                if let Some(v) = after {
+                    b = b.after(v);
+                }
+                if let Some(v) = around {
+                    b = b.around(v);
+                }
+                channel_id.messages(&http, b).await
+            }
+        })
+        .await
+        {
             Ok(messages) => Ok(ok(to_value(&messages))),
             Err(error) => Ok(err(format!("Failed to fetch message history: {error}"))),
         }
@@ -468,7 +506,12 @@ impl Tool for PinDiscordMessage {
             return Ok(err("message_id is required"));
         };
 
-        match channel_id.pin(&self.http, message_id).await {
+        match retry_discord(|| {
+            let http = self.http.clone();
+            async move { channel_id.pin(&http, message_id).await }
+        })
+        .await
+        {
             Ok(()) => Ok(ok(json!({ "pinned": true }))),
             Err(error) => Ok(err(format!("Failed to pin message: {error}"))),
         }
@@ -506,7 +549,12 @@ impl Tool for UnpinDiscordMessage {
             return Ok(err("message_id is required"));
         };
 
-        match channel_id.unpin(&self.http, message_id).await {
+        match retry_discord(|| {
+            let http = self.http.clone();
+            async move { channel_id.unpin(&http, message_id).await }
+        })
+        .await
+        {
             Ok(()) => Ok(ok(json!({ "unpinned": true }))),
             Err(error) => Ok(err(format!("Failed to unpin message: {error}"))),
         }
@@ -551,9 +599,12 @@ impl Tool for AddDiscordReaction {
             None => return Ok(err("Invalid emoji format")),
         };
 
-        match channel_id
-            .create_reaction(&self.http, message_id, reaction)
-            .await
+        match retry_discord(|| {
+            let http = self.http.clone();
+            let reaction = reaction.clone();
+            async move { channel_id.create_reaction(&http, message_id, reaction).await }
+        })
+        .await
         {
             Ok(()) => Ok(ok(json!({ "reacted": true }))),
             Err(error) => Ok(err(format!("Failed to add reaction: {error}"))),
@@ -601,9 +652,16 @@ impl Tool for RemoveDiscordReaction {
         };
         let user_id = get_user_id(&args, "user_id");
 
-        match channel_id
-            .delete_reaction(&self.http, message_id, user_id, reaction)
-            .await
+        match retry_discord(|| {
+            let http = self.http.clone();
+            let reaction = reaction.clone();
+            async move {
+                channel_id
+                    .delete_reaction(&http, message_id, user_id, reaction)
+                    .await
+            }
+        })
+        .await
         {
             Ok(()) => Ok(ok(json!({ "removed": true }))),
             Err(error) => Ok(err(format!("Failed to remove reaction: {error}"))),

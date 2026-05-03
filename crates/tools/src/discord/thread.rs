@@ -8,7 +8,7 @@ use crate::discord::{
     error::DiscordToolError,
     helpers::{
         err, get_bool, get_channel_id, get_guild_id_default, get_message_id, get_string, get_u16,
-        get_user_id, ok, parse_auto_archive_duration, parse_thread_type, to_value,
+        get_user_id, ok, parse_auto_archive_duration, parse_thread_type, retry_discord, to_value,
     },
     permission::require_current_user_admin_for_channel,
 };
@@ -101,17 +101,24 @@ impl Tool for CreateDiscordThread {
             builder = builder.invitable(invitable);
         }
 
+        let http = self.http.clone();
         let message_id = get_message_id(&args, "message_id");
-        let result = match message_id {
-            Some(message_id) => {
-                channel_id
-                    .create_thread_from_message(&self.http, message_id, builder)
-                    .await
+        match retry_discord(|| {
+            let http = http.clone();
+            let builder = builder.clone();
+            async move {
+                match message_id {
+                    Some(mid) => {
+                        channel_id
+                            .create_thread_from_message(&http, mid, builder)
+                            .await
+                    }
+                    None => channel_id.create_thread(&http, builder).await,
+                }
             }
-            None => channel_id.create_thread(&self.http, builder).await,
-        };
-
-        match result {
+        })
+        .await
+        {
             Ok(thread) => Ok(ok(to_value(&thread))),
             Err(error) => Ok(err(format!("Failed to create thread: {error}"))),
         }
@@ -143,7 +150,13 @@ impl Tool for DeleteDiscordThread {
         if let Err(message) = require_current_user_admin_for_channel(&self.http, thread_id).await {
             return Ok(err(message));
         }
-        match thread_id.delete(&self.http).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move { thread_id.delete(&http).await }
+        })
+        .await
+        {
             Ok(channel) => Ok(ok(to_value(&channel))),
             Err(error) => Ok(err(format!("Failed to delete thread: {error}"))),
         }
@@ -172,7 +185,13 @@ impl Tool for GetDiscordThreadList {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
-        match guild_id.get_active_threads(&self.http).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move { guild_id.get_active_threads(&http).await }
+        })
+        .await
+        {
             Ok(threads) => Ok(ok(to_value(&threads))),
             Err(error) => Ok(err(format!("Failed to fetch threads: {error}"))),
         }
@@ -210,7 +229,13 @@ impl Tool for AddDiscordThreadMember {
         let Some(user_id) = get_user_id(&args, "user_id") else {
             return Ok(err("user_id is required"));
         };
-        match thread_id.add_thread_member(&self.http, user_id).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move { thread_id.add_thread_member(&http, user_id).await }
+        })
+        .await
+        {
             Ok(()) => Ok(ok(json!({ "added": true }))),
             Err(error) => Ok(err(format!("Failed to add thread member: {error}"))),
         }

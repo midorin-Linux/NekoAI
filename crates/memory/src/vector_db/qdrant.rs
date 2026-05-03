@@ -1,8 +1,11 @@
 use std::collections::HashMap;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use nekoai_domain::agent::session::{SessionKey, SessionKind};
 use serde_json::json;
+use tokio_retry::Retry;
+use tokio_retry::strategy::{ExponentialBackoff, jitter};
 use tracing::{debug, info};
 
 use super::{
@@ -38,6 +41,13 @@ impl QdrantClient {
     }
 }
 
+fn qdrant_retry_strategy() -> impl Iterator<Item = Duration> {
+    ExponentialBackoff::from_millis(100)
+        .max_delay(Duration::from_secs(10))
+        .map(jitter)
+        .take(5)
+}
+
 #[async_trait]
 impl VectorDbClient for QdrantClient {
     async fn upsert(&self, req: UpsertRequest<'_>) -> anyhow::Result<()> {
@@ -54,9 +64,21 @@ impl VectorDbClient for QdrantClient {
             payload: payload_map,
         }];
 
-        let builder = qdrant_client::qdrant::UpsertPointsBuilder::new(collection, points);
+        let client = self.client.clone();
+        let col = collection.clone();
 
-        self.client.upsert_points(builder).await?;
+        Retry::spawn(qdrant_retry_strategy(), || {
+            let client = client.clone();
+            let points = points.clone();
+            let col = col.clone();
+            async move {
+                client
+                    .upsert_points(qdrant_client::qdrant::UpsertPointsBuilder::new(col, points))
+                    .await?;
+                Ok::<_, anyhow::Error>(())
+            }
+        })
+        .await?;
 
         debug!(collection = req.collection, id = %point_id, "upserted point");
         Ok(())
@@ -64,18 +86,27 @@ impl VectorDbClient for QdrantClient {
 
     async fn search(&self, req: SearchRequest<'_>) -> anyhow::Result<Vec<SearchResult>> {
         let filter = req.filter.as_ref().map(build_filter);
+        let collection_name = req.collection.to_string();
+        let vector = req.vector.to_vec();
+        let top_k = req.top_k as u64;
 
-        let mut builder = qdrant_client::qdrant::SearchPointsBuilder::new(
-            req.collection.to_string(),
-            req.vector,
-            req.top_k as u64,
-        );
+        let client = self.client.clone();
 
-        if let Some(f) = filter {
-            builder = builder.filter(f);
-        }
-
-        let results = self.client.search_points(builder).await?;
+        let results = Retry::spawn(qdrant_retry_strategy(), || {
+            let client = client.clone();
+            let col = collection_name.clone();
+            let vec = vector.clone();
+            let filter = filter.clone();
+            async move {
+                let mut builder =
+                    qdrant_client::qdrant::SearchPointsBuilder::new(col, vec, top_k);
+                if let Some(f) = filter {
+                    builder = builder.filter(f);
+                }
+                client.search_points(builder).await.map_err(|e| anyhow::anyhow!(e))
+            }
+        })
+        .await?;
 
         let search_results = results
             .result
@@ -97,10 +128,26 @@ impl VectorDbClient for QdrantClient {
     }
 
     async fn delete(&self, collection: &str, id: &str) -> anyhow::Result<()> {
-        let builder = qdrant_client::qdrant::DeletePointsBuilder::new(collection.to_string());
-        let builder = builder.points(vec![point_id_from_str(id)]).wait(true);
+        let client = self.client.clone();
+        let col = collection.to_string();
+        let point_id = point_id_from_str(id);
 
-        self.client.delete_points(builder).await?;
+        Retry::spawn(qdrant_retry_strategy(), || {
+            let client = client.clone();
+            let col = col.clone();
+            let pid = point_id.clone();
+            async move {
+                client
+                    .delete_points(
+                        qdrant_client::qdrant::DeletePointsBuilder::new(col)
+                            .points(vec![pid])
+                            .wait(true),
+                    )
+                    .await?;
+                Ok::<_, anyhow::Error>(())
+            }
+        })
+        .await?;
 
         debug!(collection = collection, id = %id, "deleted point");
         Ok(())
@@ -112,45 +159,83 @@ impl VectorDbClient for QdrantClient {
         filter: SearchFilter,
     ) -> anyhow::Result<u64> {
         let qdrant_filter = build_filter(&filter);
+        let client = self.client.clone();
+        let col = collection.to_string();
 
-        let count_response = self
-            .client
-            .count(
-                qdrant_client::qdrant::CountPointsBuilder::new(collection.to_string())
-                    .filter(qdrant_filter.clone())
-                    .exact(true),
-            )
-            .await?;
+        let count_response = Retry::spawn(qdrant_retry_strategy(), || {
+            let client = client.clone();
+            let col = col.clone();
+            let filter = qdrant_filter.clone();
+            async move {
+                client
+                    .count(
+                        qdrant_client::qdrant::CountPointsBuilder::new(col)
+                            .filter(filter)
+                            .exact(true),
+                    )
+                    .await
+                    .map_err(|e| anyhow::anyhow!(e))
+            }
+        })
+        .await?;
 
         let deleted = count_response.result.map(|r| r.count).unwrap_or(0);
         if deleted == 0 {
             return Ok(0);
         }
 
-        let delete_builder =
-            qdrant_client::qdrant::DeletePointsBuilder::new(collection.to_string())
-                .points(qdrant_filter)
-                .wait(true);
-
-        self.client.delete_points(delete_builder).await?;
+        Retry::spawn(qdrant_retry_strategy(), || {
+            let client = client.clone();
+            let col = col.clone();
+            let filter = qdrant_filter.clone();
+            async move {
+                client
+                    .delete_points(
+                        qdrant_client::qdrant::DeletePointsBuilder::new(col)
+                            .points(filter)
+                            .wait(true),
+                    )
+                    .await?;
+                Ok::<_, anyhow::Error>(())
+            }
+        })
+        .await?;
 
         Ok(deleted)
     }
 
     async fn ensure_collection(&self, name: &str, dim: usize) -> anyhow::Result<()> {
-        let exists = self.client.collection_exists(name).await?;
+        let client = self.client.clone();
+        let collection_name = name.to_string();
+
+        let exists = Retry::spawn(qdrant_retry_strategy(), || {
+            let client = client.clone();
+            let name = collection_name.clone();
+            async move { client.collection_exists(&name).await.map_err(|e| anyhow::anyhow!(e)) }
+        })
+        .await?;
 
         if !exists {
             info!(collection = name, dim = dim, "creating collection");
 
-            let builder = qdrant_client::qdrant::CreateCollectionBuilder::new(name.to_string())
-                .vectors_config(qdrant_client::qdrant::VectorParams {
-                    size: dim as u64,
-                    distance: qdrant_client::qdrant::Distance::Cosine.into(),
-                    ..Default::default()
-                });
-
-            self.client.create_collection(builder).await?;
+            Retry::spawn(qdrant_retry_strategy(), || {
+                let client = client.clone();
+                let name = collection_name.clone();
+                async move {
+                    client
+                        .create_collection(
+                            qdrant_client::qdrant::CreateCollectionBuilder::new(name)
+                                .vectors_config(qdrant_client::qdrant::VectorParams {
+                                    size: dim as u64,
+                                    distance: qdrant_client::qdrant::Distance::Cosine.into(),
+                                    ..Default::default()
+                                }),
+                        )
+                        .await?;
+                    Ok::<_, anyhow::Error>(())
+                }
+            })
+            .await?;
         }
 
         Ok(())

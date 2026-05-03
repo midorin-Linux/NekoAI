@@ -1897,6 +1897,7 @@ dependencies = [
  "serde_json",
  "serenity",
  "tokio",
+ "tokio-retry",
  "tracing",
  "uuid",
 ]
@@ -1924,6 +1925,7 @@ dependencies = [
  "serenity",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-retry",
  "tracing",
 ]
 

@@ -11,7 +11,8 @@ use crate::discord::{
     error::DiscordToolError,
     helpers::{
         err, get_bool, get_channel_id, get_guild_id_default, get_string, get_u64, ok,
-        parse_scheduled_event_status, parse_scheduled_event_type, parse_timestamp, to_value,
+        parse_scheduled_event_status, parse_scheduled_event_type, parse_timestamp, retry_discord,
+        to_value,
     },
 };
 
@@ -76,7 +77,13 @@ impl Tool for GetDiscordScheduledEvents {
         };
         let with_user_count = get_bool(&args, "with_user_count").unwrap_or(false);
 
-        match guild_id.scheduled_events(&self.http, with_user_count).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move { guild_id.scheduled_events(&http, with_user_count).await }
+        })
+        .await
+        {
             Ok(events) => Ok(ok(to_value(&events))),
             Err(error) => Ok(err(format!("Failed to fetch scheduled events: {error}"))),
         }
@@ -139,7 +146,14 @@ impl Tool for CreateDiscordScheduledEvent {
             builder = builder.location(location);
         }
 
-        match guild_id.create_scheduled_event(&self.http, builder).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            let builder = builder.clone();
+            async move { guild_id.create_scheduled_event(&http, builder).await }
+        })
+        .await
+        {
             Ok(event) => Ok(ok(to_value(&event))),
             Err(error) => Ok(err(format!("Failed to create scheduled event: {error}"))),
         }
@@ -224,9 +238,17 @@ impl Tool for ModifyDiscordScheduledEvent {
             return Ok(err("No scheduled event fields provided to modify"));
         }
 
-        match guild_id
-            .edit_scheduled_event(&self.http, event_id, builder)
-            .await
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            let builder = builder.clone();
+            async move {
+                guild_id
+                    .edit_scheduled_event(&http, event_id, builder)
+                    .await
+            }
+        })
+        .await
         {
             Ok(event) => Ok(ok(to_value(&event))),
             Err(error) => Ok(err(format!("Failed to modify scheduled event: {error}"))),
@@ -264,7 +286,13 @@ impl Tool for DeleteDiscordScheduledEvent {
             return Ok(err("event_id is required"));
         };
 
-        match guild_id.delete_scheduled_event(&self.http, event_id).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move { guild_id.delete_scheduled_event(&http, event_id).await }
+        })
+        .await
+        {
             Ok(()) => Ok(ok(json!({ "deleted": true }))),
             Err(error) => Ok(err(format!("Failed to delete scheduled event: {error}"))),
         }

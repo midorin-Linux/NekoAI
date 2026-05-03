@@ -11,7 +11,7 @@ use crate::discord::{
     error::DiscordToolError,
     helpers::{
         err, get_bool, get_channel_id, get_guild_id_default, get_string, get_u16, get_u32, ok,
-        parse_channel_type, to_value,
+        parse_channel_type, retry_discord, to_value,
     },
 };
 
@@ -131,7 +131,12 @@ impl Tool for CreateDiscordChannel {
             builder = builder.rate_limit_per_user(rate_limit);
         }
 
-        match guild_id.create_channel(&self.http, builder).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            let builder = builder.clone();
+            async move { guild_id.create_channel(&http, builder).await }
+        }).await {
             Ok(channel) => Ok(ok(to_value(&channel))),
             Err(error) => Ok(err(format!("Failed to create channel: {error}"))),
         }
@@ -165,7 +170,11 @@ impl Tool for DeleteDiscordChannel {
         };
         crate::admin_guard_channel!(&self.http, channel_id);
 
-        match channel_id.delete(&self.http).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move { channel_id.delete(&http).await }
+        }).await {
             Ok(channel) => Ok(ok(to_value(&channel))),
             Err(error) => Ok(err(format!("Failed to delete channel: {error}"))),
         }
@@ -252,7 +261,12 @@ impl Tool for ModifyDiscordChannel {
             return Ok(err("No channel fields provided to modify"));
         }
 
-        match channel_id.edit(&self.http, builder).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            let builder = builder.clone();
+            async move { channel_id.edit(&http, builder).await }
+        }).await {
             Ok(channel) => Ok(ok(to_value(&channel))),
             Err(error) => Ok(err(format!("Failed to modify channel: {error}"))),
         }
@@ -285,7 +299,11 @@ impl Tool for GetDiscordChannelInfo {
             return Ok(err("channel_id is required"));
         };
 
-        match channel_id.to_channel(&self.http).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move { channel_id.to_channel(&http).await }
+        }).await {
             Ok(channel) => Ok(ok(to_value(&channel))),
             Err(error) => Ok(err(format!("Failed to fetch channel info: {error}"))),
         }
@@ -318,7 +336,11 @@ impl Tool for GetDiscordChannelList {
             return Ok(err("guild_id is required"));
         };
 
-        match guild_id.channels(&self.http).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move { guild_id.channels(&http).await }
+        }).await {
             Ok(channels) => {
                 let channels = channels.values().cloned().collect::<Vec<_>>();
                 Ok(ok(to_value(&channels)))

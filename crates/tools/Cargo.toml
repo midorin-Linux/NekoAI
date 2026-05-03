@@ -13,3 +13,4 @@ serenity = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+tokio-retry.workspace = true

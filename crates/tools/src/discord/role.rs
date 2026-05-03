@@ -11,7 +11,7 @@ use crate::discord::{
     error::DiscordToolError,
     helpers::{
         err, get_bool, get_guild_id_default, get_string, get_u64, get_user_id, ok, parse_colour,
-        to_value,
+        retry_discord, to_value,
     },
 };
 
@@ -97,7 +97,13 @@ impl Tool for GetDiscordRoleList {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
-        match guild_id.roles(&self.http).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move { guild_id.roles(&http).await }
+        })
+        .await
+        {
             Ok(roles) => {
                 let role_list = roles.values().cloned().collect::<Vec<_>>();
                 Ok(ok(to_value(&role_list)))
@@ -155,7 +161,15 @@ impl Tool for CreateDiscordRole {
             builder
         };
 
-        match guild_id.create_role(&self.http, builder).await {
+        let http = self.http.clone();
+        let builder = builder.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            let builder = builder.clone();
+            async move { guild_id.create_role(&http, builder).await }
+        })
+        .await
+        {
             Ok(role) => Ok(ok(to_value(&role))),
             Err(error) => Ok(err(format!("Failed to create role: {error}"))),
         }
@@ -192,7 +206,13 @@ impl Tool for DeleteDiscordRole {
             return Ok(err("role_id is required"));
         };
 
-        match guild_id.delete_role(&self.http, role_id).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move { guild_id.delete_role(&http, role_id).await }
+        })
+        .await
+        {
             Ok(()) => Ok(ok(json!({ "deleted": true }))),
             Err(error) => Ok(err(format!("Failed to delete role: {error}"))),
         }
@@ -262,7 +282,15 @@ impl Tool for ModifyDiscordRole {
             return Ok(err("No role fields provided to modify"));
         }
 
-        match guild_id.edit_role(&self.http, role_id, builder).await {
+        let http = self.http.clone();
+        let builder = builder.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            let builder = builder.clone();
+            async move { guild_id.edit_role(&http, role_id, builder).await }
+        })
+        .await
+        {
             Ok(role) => Ok(ok(to_value(&role))),
             Err(error) => Ok(err(format!("Failed to modify role: {error}"))),
         }
@@ -303,11 +331,27 @@ impl Tool for AddDiscordRoleToMember {
             return Ok(err("role_id is required"));
         };
 
-        match guild_id.member(&self.http, user_id).await {
-            Ok(member) => match member.add_role(&self.http, role_id).await {
-                Ok(()) => Ok(ok(json!({ "added": true }))),
-                Err(error) => Ok(err(format!("Failed to add role to member: {error}"))),
-            },
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move { guild_id.member(&http, user_id).await }
+        })
+        .await
+        {
+            Ok(member) => {
+                let http = self.http.clone();
+                let member = member.clone();
+                match retry_discord(|| {
+                    let http = http.clone();
+                    let member = member.clone();
+                    async move { member.add_role(&http, role_id).await }
+                })
+                .await
+                {
+                    Ok(()) => Ok(ok(json!({ "added": true }))),
+                    Err(error) => Ok(err(format!("Failed to add role to member: {error}"))),
+                }
+            }
             Err(error) => Ok(err(format!("Failed to fetch member: {error}"))),
         }
     }
@@ -347,11 +391,27 @@ impl Tool for RemoveDiscordRoleFromMember {
             return Ok(err("role_id is required"));
         };
 
-        match guild_id.member(&self.http, user_id).await {
-            Ok(member) => match member.remove_role(&self.http, role_id).await {
-                Ok(()) => Ok(ok(json!({ "removed": true }))),
-                Err(error) => Ok(err(format!("Failed to remove role from member: {error}"))),
-            },
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move { guild_id.member(&http, user_id).await }
+        })
+        .await
+        {
+            Ok(member) => {
+                let http = self.http.clone();
+                let member = member.clone();
+                match retry_discord(|| {
+                    let http = http.clone();
+                    let member = member.clone();
+                    async move { member.remove_role(&http, role_id).await }
+                })
+                .await
+                {
+                    Ok(()) => Ok(ok(json!({ "removed": true }))),
+                    Err(error) => Ok(err(format!("Failed to remove role from member: {error}"))),
+                }
+            }
             Err(error) => Ok(err(format!("Failed to fetch member: {error}"))),
         }
     }

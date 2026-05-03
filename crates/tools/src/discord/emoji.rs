@@ -6,7 +6,7 @@ use serenity::{all::EmojiId, http::Http};
 
 use crate::discord::{
     error::DiscordToolError,
-    helpers::{err, get_guild_id_default, get_string, get_u64, ok, to_value},
+    helpers::{err, get_guild_id_default, get_string, get_u64, ok, retry_discord, to_value},
 };
 
 pub struct GetDiscordEmojiList {
@@ -65,7 +65,13 @@ impl Tool for GetDiscordEmojiList {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
-        match guild_id.emojis(&self.http).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move { guild_id.emojis(&http).await }
+        })
+        .await
+        {
             Ok(emojis) => Ok(ok(to_value(&emojis))),
             Err(error) => Ok(err(format!("Failed to fetch emojis: {error}"))),
         }
@@ -106,9 +112,20 @@ impl Tool for CreateDiscordEmoji {
             return Ok(err("image is required"));
         };
 
-        match guild_id
-            .create_emoji(&self.http, name.as_str(), image.as_str())
-            .await
+        let http = self.http.clone();
+        let name = name.clone();
+        let image = image.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            let name = name.clone();
+            let image = image.clone();
+            async move {
+                guild_id
+                    .create_emoji(&http, name.as_str(), image.as_str())
+                    .await
+            }
+        })
+        .await
         {
             Ok(emoji) => Ok(ok(to_value(&emoji))),
             Err(error) => Ok(err(format!("Failed to create emoji: {error}"))),
@@ -146,7 +163,13 @@ impl Tool for DeleteDiscordEmoji {
             return Ok(err("emoji_id is required"));
         };
 
-        match guild_id.delete_emoji(&self.http, emoji_id).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move { guild_id.delete_emoji(&http, emoji_id).await }
+        })
+        .await
+        {
             Ok(()) => Ok(ok(json!({ "deleted": true }))),
             Err(error) => Ok(err(format!("Failed to delete emoji: {error}"))),
         }
@@ -175,7 +198,13 @@ impl Tool for GetDiscordStickerList {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
-        match guild_id.stickers(&self.http).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move { guild_id.stickers(&http).await }
+        })
+        .await
+        {
             Ok(stickers) => Ok(ok(to_value(&stickers))),
             Err(error) => Ok(err(format!("Failed to fetch stickers: {error}"))),
         }

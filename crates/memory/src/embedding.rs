@@ -1,5 +1,9 @@
+use std::time::Duration;
+
 use async_trait::async_trait;
 use rig::{client::EmbeddingsClient as _, embeddings::EmbeddingModel as _, providers::openai};
+use tokio_retry::Retry;
+use tokio_retry::strategy::{ExponentialBackoff, jitter};
 use tracing::warn;
 
 #[async_trait]
@@ -39,15 +43,27 @@ impl OpenAICompatibleEmbedder {
 #[async_trait]
 impl Embedder for OpenAICompatibleEmbedder {
     async fn embed(&self, text: &str) -> Vec<f32> {
-        match self.model.embed_text(text).await {
+        let strategy = ExponentialBackoff::from_millis(100)
+            .max_delay(Duration::from_secs(10))
+            .map(jitter)
+            .take(5);
+        let text = text.to_string();
+
+        match Retry::spawn(strategy, || {
+            let model = self.model.clone();
+            let text = text.clone();
+            async move { model.embed_text(&text).await.map_err(|e| anyhow::anyhow!(e)) }
+        })
+        .await
+        {
             Ok(embedding) => {
                 let mut out = Vec::with_capacity(embedding.vec.len());
                 out.extend(embedding.vec.into_iter().map(|value| value as f32));
                 out
             }
             Err(error) => {
-                warn!(error = %error, "failed to embed text, falling back to mock embedder");
-                self.fallback.embed(text).await
+                warn!(error = %error, "failed to embed text after retries, falling back to mock embedder");
+                self.fallback.embed(&text).await
             }
         }
     }

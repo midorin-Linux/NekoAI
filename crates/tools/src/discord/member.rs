@@ -11,7 +11,7 @@ use crate::discord::{
     error::DiscordToolError,
     helpers::{
         err, get_bool, get_channel_id, get_guild_id_default, get_string, get_u8, get_u32, get_u64,
-        get_u64_list, get_user_id, ok, parse_timestamp, to_value,
+        get_u64_list, get_user_id, ok, parse_timestamp, retry_discord, to_value,
     },
     permission::require_current_user_admin,
 };
@@ -111,7 +111,13 @@ impl Tool for GetDiscordMemberList {
         let limit = get_u64(&args, "limit");
         let after = get_user_id(&args, "after");
 
-        match guild_id.members(&self.http, limit, after).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move { guild_id.members(&http, limit, after).await }
+        })
+        .await
+        {
             Ok(members) => Ok(ok(to_value(&members))),
             Err(error) => Ok(err(format!("Failed to fetch member list: {error}"))),
         }
@@ -147,7 +153,13 @@ impl Tool for GetDiscordMemberInfo {
             return Ok(err("user_id is required"));
         };
 
-        match guild_id.member(&self.http, user_id).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move { guild_id.member(&http, user_id).await }
+        })
+        .await
+        {
             Ok(member) => Ok(ok(to_value(&member))),
             Err(error) => Ok(err(format!("Failed to fetch member info: {error}"))),
         }
@@ -188,9 +200,18 @@ impl Tool for KickDiscordMember {
         };
         let reason = get_string(&args, "reason");
 
-        match guild_id
-            .kick_with_reason(&self.http, user_id, reason.as_deref().unwrap_or(""))
-            .await
+        let http = self.http.clone();
+        let reason = reason.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            let reason = reason.clone();
+            async move {
+                guild_id
+                    .kick_with_reason(&http, user_id, reason.as_deref().unwrap_or(""))
+                    .await
+            }
+        })
+        .await
         {
             Ok(()) => Ok(ok(json!({ "kicked": true }))),
             Err(error) => Ok(err(format!("Failed to kick member: {error}"))),
@@ -234,14 +255,23 @@ impl Tool for BanDiscordMember {
         let delete_message_days = get_u8(&args, "delete_message_days").unwrap_or(0);
         let reason = get_string(&args, "reason");
 
-        match guild_id
-            .ban_with_reason(
-                &self.http,
-                user_id,
-                delete_message_days,
-                reason.as_deref().unwrap_or(""),
-            )
-            .await
+        let http = self.http.clone();
+        let reason = reason.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            let reason = reason.clone();
+            async move {
+                guild_id
+                    .ban_with_reason(
+                        &http,
+                        user_id,
+                        delete_message_days,
+                        reason.as_deref().unwrap_or(""),
+                    )
+                    .await
+            }
+        })
+        .await
         {
             Ok(()) => Ok(ok(json!({ "banned": true }))),
             Err(error) => Ok(err(format!("Failed to ban member: {error}"))),
@@ -281,7 +311,13 @@ impl Tool for UnbanDiscordMember {
             return Ok(err("user_id is required"));
         };
 
-        match guild_id.unban(&self.http, user_id).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move { guild_id.unban(&http, user_id).await }
+        })
+        .await
+        {
             Ok(()) => Ok(ok(json!({ "unbanned": true }))),
             Err(error) => Ok(err(format!("Failed to unban member: {error}"))),
         }
@@ -325,14 +361,25 @@ impl Tool for BulkBanDiscordMembers {
         let reason = get_string(&args, "reason");
         let user_ids = user_ids.into_iter().map(UserId::new).collect::<Vec<_>>();
 
-        match guild_id
-            .bulk_ban(
-                self.http.as_ref(),
-                &user_ids,
-                delete_message_seconds,
-                reason.as_deref(),
-            )
-            .await
+        let http = self.http.clone();
+        let user_ids = user_ids.clone();
+        let reason = reason.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            let user_ids = user_ids.clone();
+            let reason = reason.clone();
+            async move {
+                guild_id
+                    .bulk_ban(
+                        http.as_ref(),
+                        &user_ids,
+                        delete_message_seconds,
+                        reason.as_deref(),
+                    )
+                    .await
+            }
+        })
+        .await
         {
             Ok(result) => Ok(ok(to_value(&result))),
             Err(error) => Ok(err(format!("Failed to bulk ban members: {error}"))),
@@ -423,7 +470,15 @@ impl Tool for ModifyDiscordMember {
             return Ok(err("No member fields provided to modify"));
         }
 
-        match guild_id.edit_member(&self.http, user_id, builder).await {
+        let http = self.http.clone();
+        let builder = builder.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            let builder = builder.clone();
+            async move { guild_id.edit_member(&http, user_id, builder).await }
+        })
+        .await
+        {
             Ok(member) => Ok(ok(to_value(&member))),
             Err(error) => Ok(err(format!("Failed to modify member: {error}"))),
         }
@@ -472,7 +527,15 @@ impl Tool for TimeoutDiscordMember {
             return Ok(err("Either 'until' or 'clear' is required"));
         };
 
-        match guild_id.edit_member(&self.http, user_id, builder).await {
+        let http = self.http.clone();
+        let builder = builder.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            let builder = builder.clone();
+            async move { guild_id.edit_member(&http, user_id, builder).await }
+        })
+        .await
+        {
             Ok(member) => Ok(ok(to_value(&member))),
             Err(error) => Ok(err(format!("Failed to timeout member: {error}"))),
         }

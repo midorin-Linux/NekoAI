@@ -8,7 +8,7 @@ use crate::discord::{
     error::DiscordToolError,
     helpers::{
         err, get_bool, get_channel_id, get_guild_id_default, get_string, get_u8, get_u32, ok,
-        to_value,
+        retry_discord, to_value,
     },
 };
 
@@ -60,7 +60,13 @@ impl Tool for GetDiscordInviteList {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
-        match guild_id.invites(&self.http).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move { guild_id.invites(&http).await }
+        })
+        .await
+        {
             Ok(invites) => Ok(ok(to_value(&invites))),
             Err(error) => Ok(err(format!("Failed to fetch invites: {error}"))),
         }
@@ -111,7 +117,14 @@ impl Tool for CreateDiscordInvite {
             builder = builder.unique(unique);
         }
 
-        match channel_id.create_invite(&self.http, builder).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            let builder = builder.clone();
+            async move { channel_id.create_invite(&http, builder).await }
+        })
+        .await
+        {
             Ok(invite) => Ok(ok(to_value(&invite))),
             Err(error) => Ok(err(format!("Failed to create invite: {error}"))),
         }
@@ -141,7 +154,15 @@ impl Tool for DeleteDiscordInvite {
             return Ok(err("code is required"));
         };
         crate::admin_guard_invite!(&self.http, code.as_str());
-        match self.http.delete_invite(code.as_str(), None).await {
+        let http = self.http.clone();
+        let code = code.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            let code = code.clone();
+            async move { http.delete_invite(code.as_str(), None).await }
+        })
+        .await
+        {
             Ok(invite) => Ok(ok(to_value(&invite))),
             Err(error) => Ok(err(format!("Failed to delete invite: {error}"))),
         }

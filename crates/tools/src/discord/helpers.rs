@@ -1,4 +1,8 @@
 use std::str::FromStr;
+use std::time::Duration;
+
+use tokio_retry::Retry;
+use tokio_retry::strategy::{ExponentialBackoff, jitter};
 
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -194,4 +198,19 @@ pub fn parse_colour(value: &Value) -> Option<Colour> {
 
 pub fn parse_reaction_type(value: &Value) -> Option<ReactionType> {
     parse_string(value).and_then(|value| ReactionType::from_str(&value).ok())
+}
+
+pub fn discord_retry_strategy() -> impl Iterator<Item = Duration> {
+    ExponentialBackoff::from_millis(100)
+        .max_delay(Duration::from_secs(10))
+        .map(jitter)
+        .take(5)
+}
+
+pub async fn retry_discord<F, Fut, T>(f: F) -> serenity::Result<T>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = serenity::Result<T>>,
+{
+    Retry::spawn(discord_retry_strategy(), f).await
 }

@@ -6,7 +6,7 @@ use serenity::{all::EditMember, http::Http};
 
 use crate::discord::{
     error::DiscordToolError,
-    helpers::{err, get_bool, get_channel_id, get_guild_id_default, get_user_id, ok, to_value},
+    helpers::{err, get_bool, get_channel_id, get_guild_id_default, get_user_id, ok, retry_discord, to_value},
 };
 
 pub struct MoveDiscordMemberVoice {
@@ -77,7 +77,13 @@ impl Tool for MoveDiscordMemberVoice {
             return Ok(err("channel_id is required"));
         };
 
-        match guild_id.move_member(&self.http, user_id, channel_id).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move { guild_id.move_member(&http, user_id, channel_id).await }
+        })
+        .await
+        {
             Ok(member) => Ok(ok(to_value(&member))),
             Err(error) => Ok(err(format!("Failed to move member: {error}"))),
         }
@@ -114,7 +120,13 @@ impl Tool for DisconnectDiscordMemberVoice {
             return Ok(err("user_id is required"));
         };
 
-        match guild_id.disconnect_member(&self.http, user_id).await {
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move { guild_id.disconnect_member(&http, user_id).await }
+        })
+        .await
+        {
             Ok(member) => Ok(ok(to_value(&member))),
             Err(error) => Ok(err(format!("Failed to disconnect member: {error}"))),
         }
@@ -155,9 +167,16 @@ impl Tool for MuteDiscordMember {
             return Ok(err("mute is required"));
         };
 
-        match guild_id
-            .edit_member(&self.http, user_id, EditMember::new().mute(mute))
-            .await
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move {
+                guild_id
+                    .edit_member(&http, user_id, EditMember::new().mute(mute))
+                    .await
+            }
+        })
+        .await
         {
             Ok(member) => Ok(ok(to_value(&member))),
             Err(error) => Ok(err(format!("Failed to mute member: {error}"))),
@@ -199,9 +218,16 @@ impl Tool for DeafenDiscordMember {
             return Ok(err("deafen is required"));
         };
 
-        match guild_id
-            .edit_member(&self.http, user_id, EditMember::new().deafen(deafen))
-            .await
+        let http = self.http.clone();
+        match retry_discord(|| {
+            let http = http.clone();
+            async move {
+                guild_id
+                    .edit_member(&http, user_id, EditMember::new().deafen(deafen))
+                    .await
+            }
+        })
+        .await
         {
             Ok(member) => Ok(ok(to_value(&member))),
             Err(error) => Ok(err(format!("Failed to deafen member: {error}"))),
