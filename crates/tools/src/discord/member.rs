@@ -274,6 +274,9 @@ impl Tool for UnbanDiscordMember {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
+        if let Err(message) = require_current_user_admin(&self.http, guild_id).await {
+            return Ok(err(message));
+        }
         let Some(user_id) = get_user_id(&args, "user_id") else {
             return Ok(err("user_id is required"));
         };
