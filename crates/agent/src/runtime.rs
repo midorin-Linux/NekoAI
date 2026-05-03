@@ -1,5 +1,4 @@
-use std::sync::Arc;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use anyhow::{Context, Result};
 use dashmap::DashMap;
@@ -21,8 +20,10 @@ use rig::{
 };
 use serde::Deserialize;
 use tokio::sync::{Semaphore, mpsc};
-use tokio_retry::Retry;
-use tokio_retry::strategy::{ExponentialBackoff, jitter};
+use tokio_retry::{
+    Retry,
+    strategy::{ExponentialBackoff, jitter},
+};
 use tracing::{debug, info, warn};
 
 use crate::{
@@ -618,7 +619,7 @@ fn parse_extracted_facts(raw: &str) -> Result<Vec<(String, Vec<String>)>> {
                 return None;
             }
 
-            parse_extracted_facts_json(&trimmed[start..=end])
+            parse_extracted_facts_json(&trimmed[start ..= end])
         })
         .ok_or_else(|| anyhow::anyhow!("failed to parse extracted facts JSON: {}", raw))
 }

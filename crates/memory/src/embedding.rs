@@ -2,8 +2,10 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use rig::{client::EmbeddingsClient as _, embeddings::EmbeddingModel as _, providers::openai};
-use tokio_retry::Retry;
-use tokio_retry::strategy::{ExponentialBackoff, jitter};
+use tokio_retry::{
+    Retry,
+    strategy::{ExponentialBackoff, jitter},
+};
 use tracing::warn;
 
 #[async_trait]
@@ -52,7 +54,12 @@ impl Embedder for OpenAICompatibleEmbedder {
         match Retry::spawn(strategy, || {
             let model = self.model.clone();
             let text = text.clone();
-            async move { model.embed_text(&text).await.map_err(|e| anyhow::anyhow!(e)) }
+            async move {
+                model
+                    .embed_text(&text)
+                    .await
+                    .map_err(|e| anyhow::anyhow!(e))
+            }
         })
         .await
         {
@@ -88,7 +95,7 @@ impl Embedder for MockEmbedder {
     async fn embed(&self, text: &str) -> Vec<f32> {
         let mut rng = RandSimple(stable_seed(text));
         let mut out = Vec::with_capacity(self.dim);
-        for _ in 0..self.dim {
+        for _ in 0 .. self.dim {
             out.push(rng.next_f32() * 2.0 - 1.0);
         }
         out

@@ -1,11 +1,12 @@
-use std::collections::HashMap;
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use async_trait::async_trait;
 use nekoai_domain::agent::session::{SessionKey, SessionKind};
 use serde_json::json;
-use tokio_retry::Retry;
-use tokio_retry::strategy::{ExponentialBackoff, jitter};
+use tokio_retry::{
+    Retry,
+    strategy::{ExponentialBackoff, jitter},
+};
 use tracing::{debug, info};
 
 use super::{
@@ -98,12 +99,14 @@ impl VectorDbClient for QdrantClient {
             let vec = vector.clone();
             let filter = filter.clone();
             async move {
-                let mut builder =
-                    qdrant_client::qdrant::SearchPointsBuilder::new(col, vec, top_k);
+                let mut builder = qdrant_client::qdrant::SearchPointsBuilder::new(col, vec, top_k);
                 if let Some(f) = filter {
                     builder = builder.filter(f);
                 }
-                client.search_points(builder).await.map_err(|e| anyhow::anyhow!(e))
+                client
+                    .search_points(builder)
+                    .await
+                    .map_err(|e| anyhow::anyhow!(e))
             }
         })
         .await?;
@@ -211,7 +214,12 @@ impl VectorDbClient for QdrantClient {
         let exists = Retry::spawn(qdrant_retry_strategy(), || {
             let client = client.clone();
             let name = collection_name.clone();
-            async move { client.collection_exists(&name).await.map_err(|e| anyhow::anyhow!(e)) }
+            async move {
+                client
+                    .collection_exists(&name)
+                    .await
+                    .map_err(|e| anyhow::anyhow!(e))
+            }
         })
         .await?;
 

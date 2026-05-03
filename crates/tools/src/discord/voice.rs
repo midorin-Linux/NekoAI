@@ -6,7 +6,10 @@ use serenity::{all::EditMember, http::Http};
 
 use crate::discord::{
     error::DiscordToolError,
-    helpers::{err, get_bool, get_channel_id, get_guild_id_default, get_user_id, ok, retry_discord, to_value},
+    helpers::{
+        err, get_bool, get_channel_id, get_guild_id_default, get_user_id, ok, retry_discord,
+        to_value,
+    },
 };
 
 pub struct MoveDiscordMemberVoice {

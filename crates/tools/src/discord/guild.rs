@@ -123,7 +123,8 @@ impl Tool for GetDiscordGuildList {
         match retry_discord(|| {
             let http = http.clone();
             async move {
-                let pagination = after.map(|guild_id| GuildPagination::After(GuildId::new(guild_id)));
+                let pagination =
+                    after.map(|guild_id| GuildPagination::After(GuildId::new(guild_id)));
                 http.get_guilds(pagination, limit).await
             }
         })

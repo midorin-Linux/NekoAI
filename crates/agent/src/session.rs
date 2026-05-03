@@ -1,5 +1,4 @@
-use std::collections::VecDeque;
-use std::sync::Arc;
+use std::{collections::VecDeque, sync::Arc};
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};

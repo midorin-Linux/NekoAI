@@ -127,7 +127,7 @@ pub fn run_wizard() -> Result<Config> {
     println!();
     println!(
         "  Discord Token  : {}",
-        "*".repeat(token.len().saturating_sub(4)) + &token[token.len().saturating_sub(4)..]
+        "*".repeat(token.len().saturating_sub(4)) + &token[token.len().saturating_sub(4) ..]
     );
     println!("  Base URL        : {}", base_url);
     println!("  Conversation    : {}", model_name);

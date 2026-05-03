@@ -136,7 +136,9 @@ impl Tool for CreateDiscordChannel {
             let http = http.clone();
             let builder = builder.clone();
             async move { guild_id.create_channel(&http, builder).await }
-        }).await {
+        })
+        .await
+        {
             Ok(channel) => Ok(ok(to_value(&channel))),
             Err(error) => Ok(err(format!("Failed to create channel: {error}"))),
         }
@@ -174,7 +176,9 @@ impl Tool for DeleteDiscordChannel {
         match retry_discord(|| {
             let http = http.clone();
             async move { channel_id.delete(&http).await }
-        }).await {
+        })
+        .await
+        {
             Ok(channel) => Ok(ok(to_value(&channel))),
             Err(error) => Ok(err(format!("Failed to delete channel: {error}"))),
         }
@@ -266,7 +270,9 @@ impl Tool for ModifyDiscordChannel {
             let http = http.clone();
             let builder = builder.clone();
             async move { channel_id.edit(&http, builder).await }
-        }).await {
+        })
+        .await
+        {
             Ok(channel) => Ok(ok(to_value(&channel))),
             Err(error) => Ok(err(format!("Failed to modify channel: {error}"))),
         }
@@ -303,7 +309,9 @@ impl Tool for GetDiscordChannelInfo {
         match retry_discord(|| {
             let http = http.clone();
             async move { channel_id.to_channel(&http).await }
-        }).await {
+        })
+        .await
+        {
             Ok(channel) => Ok(ok(to_value(&channel))),
             Err(error) => Ok(err(format!("Failed to fetch channel info: {error}"))),
         }
@@ -340,7 +348,9 @@ impl Tool for GetDiscordChannelList {
         match retry_discord(|| {
             let http = http.clone();
             async move { guild_id.channels(&http).await }
-        }).await {
+        })
+        .await
+        {
             Ok(channels) => {
                 let channels = channels.values().cloned().collect::<Vec<_>>();
                 Ok(ok(to_value(&channels)))

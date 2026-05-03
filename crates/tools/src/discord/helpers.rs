@@ -1,14 +1,14 @@
-use std::str::FromStr;
-use std::time::Duration;
-
-use tokio_retry::Retry;
-use tokio_retry::strategy::{ExponentialBackoff, jitter};
+use std::{str::FromStr, time::Duration};
 
 use serde::Serialize;
 use serde_json::{Value, json};
 use serenity::all::{
     AutoArchiveDuration, ChannelId, ChannelType, Colour, GuildId, MessageId, ReactionType,
     ScheduledEventStatus, ScheduledEventType, Timestamp, UserId,
+};
+use tokio_retry::{
+    Retry,
+    strategy::{ExponentialBackoff, jitter},
 };
 
 pub fn ok(data: Value) -> Value {

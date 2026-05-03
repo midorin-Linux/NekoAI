@@ -602,7 +602,11 @@ impl Tool for AddDiscordReaction {
         match retry_discord(|| {
             let http = self.http.clone();
             let reaction = reaction.clone();
-            async move { channel_id.create_reaction(&http, message_id, reaction).await }
+            async move {
+                channel_id
+                    .create_reaction(&http, message_id, reaction)
+                    .await
+            }
         })
         .await
         {
