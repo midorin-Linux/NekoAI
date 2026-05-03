@@ -2,24 +2,25 @@
 
 ## 役割
 
-`nekoai-agent` は、ユーザー入力を受けて LLM 推論を実行し、セッション管理・記憶連携・応答生成を行う中核レイヤーです。Discord や CLI などの入出力層には依存せず、`SessionKey`・`Option<String>`（user_id）・文字列入力を受けて応答文字列を返します。
+`nekoai-agent` は、ユーザー入力を受けて LLM 推論を実行し、セッション管理・記憶連携・応答生成を行う中核レイヤーです。Discord や CLI などの入出力層には依存せず、`SessionKey`・`Option<String>`（user_id）・文字列入力を受けて応答文字列を返します。Rig SDK の `ToolServerHandle` を介してツール実行を管理します。
 
 ## 主な構成
 
-- `runtime.rs`: 起動初期化、推論ループ (AgentRuntime)、要約/長期記憶抽出トリガー、抽出タスクプロセッサ
+- `runtime.rs`: 起動初期化、推論ループ (AgentRuntime)、ツール管理、要約/長期記憶抽出トリガー、抽出タスクプロセッサ
 - `context.rs`: システムプロンプト構築（記憶注入）と会話ターン圧縮
 - `session.rs`: セッションの生成・更新・削除（SessionManager）
 - `provider.rs`: OpenAI 互換の Rig `AgentBuilder` を組み立てる `OpenAICompatibleAdapter`
 
 ## 起動時ワークフロー（`AgentRuntime::new_with_progress`）
 
-合計 5 ステップの進捗 (`RuntimeInitProgress`) を返し、CLI 側のプログレスバーに反映されます。
+合計 6 ステップの進捗 (`RuntimeInitProgress`) を返し、CLI 側のプログレスバーに反映されます。
 
 1. `SessionManager` を `Arc<Mutex<...>>` で初期化
 2. `.config/INSTRUCTION.md` を読み込み、システム指示として保持（なければ初期化失敗）
 3. `ContextManager` を生成（`max_tokens=16384`, `compaction_threshold=0.7`）。`MemoryStore` を `Arc` でラップして保持
 4. OpenAI 互換クライアントを `config.provider.language_model` の設定（`api_key`, `provider_base_url`）から構築し、`OpenAICompatibleAdapter` でラップ
 5. モデル名・生成パラメータ（`max_token`, `temperature`, `top_p`）と共に `AgentRuntime` を構築
+6. `ToolServer` を起動し、`ToolServerHandle` を保持
 
 **内部で実行される追加の初期化**:
 
@@ -29,6 +30,27 @@
 
 `new()` は `new_with_progress` を空のコールバックで呼び出す簡易ラッパーです。
 
+## ツール管理ワークフロー
+
+`AgentRuntime` は `ToolServerHandle` を内部に保持し、外部からツールを動的に登録できます。
+
+### ツール登録（`add_tool`）
+
+```rust
+pub async fn add_tool(&self, tool: impl ToolDyn + 'static)
+```
+
+- 呼び出し元: `nekoai-discord::client.rs`（起動時）
+- 登録されるツール: 52 個の Discord API 連携ツール（メッセージ、チャンネル、ギルド、ロール、メンバー、スレッド、ボイス、招待、絵文字、イベント）
+- 各ツールは `Arc<Http>` を共有し、Rig の `ToolServer` に登録される
+
+### ツール実行
+
+1. Rig エージェントが推論中にツール呼び出しを返す
+2. `ToolServerHandle` が登録済みツールを検索
+3. 該当ツールが `call(args)` を実行
+4. 結果が LLM 応答に組み込まれる
+
 ## 推論ワークフロー（`submit`）
 
 `submit(session_key, user_id, user_input) -> Result<AgentResponse>`:
@@ -36,7 +58,7 @@
 1. `SessionManager` から `SessionKey` 単位でセッション取得（なければ新規作成）
 2. `MemoryStore::recall` で中期/長期記憶を検索
 3. `ContextManager::build` でプロンプトコンテキストを構築（後述）
-4. `OpenAICompatibleAdapter` で Rig エージェントを生成（`preamble` にシステムプロンプトを設定）
+4. `OpenAICompatibleAdapter` で Rig エージェントを生成（`preamble` にシステムプロンプトを設定、`tool_server_handle` を経由してツール登録）
 5. コンテキストの既存ターンを `chat_history`（`Vec<Message>` の User/Assistant ペア）に変換
 6. `agent.chat(user_message, chat_history)` を実行して応答を取得
 7. 短期記憶へ追記（`push_short_term`）
@@ -109,10 +131,13 @@
 - `.config/INSTRUCTION.md` がない場合は初期化失敗（`context` 付き `Err`）
 - 長期記憶抽出の JSON パース失敗時は `tokio_retry`（最大 1 回）で再試行、それでも失敗した場合は `warn` ログ
 - 抽出キューが満杯の場合はタスクを破棄し `warn` ログで通知
+- ツール登録失敗時は `warn` ログで通知（登録失敗しても本体は継続）
 
 ## 連携ポイント
 
 - 入力: `nekoai-discord`（`ask` コマンド）
 - 設定: `nekoai-config`（モデル/API/パラメータ）
 - 記憶: `nekoai-memory`
+- ツール: `nekoai-tools::discord`（Discord API 連携ツール群）
 - 型: `nekoai-domain::agent::session::SessionKey`
+- ツール実行: Rig `ToolServerHandle` を介した動的ツール管理
