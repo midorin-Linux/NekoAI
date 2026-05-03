@@ -45,6 +45,7 @@ rig-core = { version = "0.36.0", features = ["image", "derive"]}
 rig-qdrant = "0.2.5"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
+thiserror = "2.0.18"
 serenity = { version = "0.12.5", features = ["full"] }
 tokio = { version = "1.52.1", features = ["full"] }
 tokio-retry = "0.3.1"

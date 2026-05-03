@@ -58,7 +58,10 @@ NekoAIはRustで開発されているDiscord用AIエージェントです。Rig 
 - `cli_fallback`: コマンドライン引数から Config を構築
 
 ### tools (nekoai-tools)
-- ツールレジストリ・実行・権限管理（現在は空のクレート）
+- Rig `Tool` trait を実装したツールの定義
+- `discord` モジュール: Discord API と連携するツール（`SendDiscordMessage` など）
+- 各ツールは `rig::tool::Tool` を実装し、エージェントから呼び出し可能
+- 新しいツールを追加する場合は、`Tool` trait を実装し、`discord` モジュール（または適切なモジュール）に配置する
 
 ## 開発環境設定
 
@@ -105,7 +108,7 @@ cargo clippy -- -D warnings  # リンター
 
 1. **設定ファイルのパス**：`.config/config.json`をルートディレクトリに期待
 2. **Qdrant接続**：デフォルトで`http://localhost:6334`に接続
-3. **ツールシステム**：現在は空のクレートで、実装待ち
+3. **ツールシステム**：`SendDiscordMessage` ツールが実装済み。`AgentRuntime::add_tool()` で動的にツールを追加可能
 4. ~~セットアップウィザード：TUIベースのセットアップが計画されているが、現在はCLIフォールバックのみ~~ → 実装済み（dialoguer ベースの4ステップウィザード + CLI fallback）
 
 ## データフロー
@@ -114,7 +117,7 @@ cargo clippy -- -D warnings  # リンター
 2. AgentRuntime.submit()で推論開始
 3. 記憶想起（中期・長期記憶から関連情報検索）
 4. コンテキスト構築（短期記憶 + 想起した記憶）
-5. Rigエージェントで推論実行
+5. Rigエージェントで推論実行（ツール呼び出しを含む）
 6. 短期記憶に結果を保存
 7. 応答をDiscordに送信
 
@@ -122,4 +125,4 @@ cargo clippy -- -D warnings  # リンター
 
 - Web UI拡張：`feature = "web-ui"`フラグで制御
 - MCPサーバー：設定ファイルで定義可能
-- カスタムツール：ToolRegistryに登録可能
+- カスタムツール：ToolRegistryに登録可能（`AgentRuntime::add_tool()` で動的追加）

@@ -8,6 +8,7 @@ use nekoai_memory::{
     store::MemoryStore,
 };
 use rig::completion::{Chat, Message, Prompt};
+use rig::tool::{ToolDyn, server::{ToolServer, ToolServerHandle}};
 use serde::Deserialize;
 use tokio::sync::{Mutex, Semaphore, mpsc};
 use tracing::{debug, info, warn};
@@ -26,7 +27,7 @@ pub struct RuntimeInitProgress {
 }
 
 impl RuntimeInitProgress {
-    pub const TOTAL_STEPS: u64 = 5;
+    pub const TOTAL_STEPS: u64 = 6;
 
     fn new(completed_steps: u64, message: &'static str) -> Self {
         Self {
@@ -66,6 +67,7 @@ pub struct AgentRuntime {
     agent_model_name: String,
     agent_parameters: Parameters,
     extraction_tx: mpsc::Sender<ExtractionTask>,
+    tool_server_handle: ToolServerHandle,
 }
 
 impl AgentRuntime {
@@ -146,7 +148,10 @@ impl AgentRuntime {
             .await;
         });
 
-        on_progress(RuntimeInitProgress::new(5, "agent runtime initialized"));
+        let tool_server_handle = ToolServer::new().run();
+        on_progress(RuntimeInitProgress::new(5, "tool server initialized"));
+
+        on_progress(RuntimeInitProgress::new(6, "agent runtime initialized"));
 
         info!("agent runtime initialized");
 
@@ -158,6 +163,7 @@ impl AgentRuntime {
             agent_model_name,
             agent_parameters,
             extraction_tx,
+            tool_server_handle,
         })
     }
 
@@ -236,6 +242,7 @@ impl AgentRuntime {
                 self.agent_parameters.clone(),
             )
             .preamble(context.system_prompt.as_str())
+            .tool_server_handle(self.tool_server_handle.clone())
             .build();
 
         let mut chat_history = Vec::with_capacity(context.turns.len() * 2);
@@ -349,6 +356,14 @@ impl AgentRuntime {
                 error = %e,
                 "failed to queue long-term memory extraction task (queue may be full)"
             );
+        }
+    }
+    
+    pub async fn add_tool(&self, tool: impl ToolDyn + 'static) {
+        if let Err(e) = self.tool_server_handle.add_tool(tool).await {
+            warn!(error = %e, "failed to register tool");
+        } else {
+            info!("tool registered successfully");
         }
     }
 
