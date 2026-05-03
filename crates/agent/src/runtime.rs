@@ -19,7 +19,7 @@ use rig::{
     },
 };
 use serde::Deserialize;
-use tokio::sync::{Mutex, Semaphore, mpsc};
+use tokio::sync::{Semaphore, mpsc};
 use tracing::{debug, info, warn};
 
 use crate::{
@@ -69,7 +69,7 @@ const EXTRACTION_CONCURRENT_LIMIT: usize = 3;
 
 #[derive(Clone)]
 pub struct AgentRuntime {
-    session_manager: Arc<Mutex<SessionManager>>,
+    session_manager: Arc<SessionManager>,
     context_manager: Arc<ContextManager>,
     memory_store: Arc<MemoryStore>,
     conversation_model: Arc<OpenAICompatibleAdapter>,
@@ -97,7 +97,7 @@ impl AgentRuntime {
         F: FnMut(RuntimeInitProgress),
     {
         info!("initializing agent runtime");
-        let session_manager = Arc::new(Mutex::new(SessionManager::new()));
+        let session_manager = Arc::new(SessionManager::new());
         on_progress(RuntimeInitProgress::new(1, "session manager ready"));
 
         let system_instruction_path = std::path::Path::new(".config").join("INSTRUCTION.md");
@@ -203,10 +203,7 @@ impl AgentRuntime {
         let messages = self.memory_store.get_short_term_messages(session_key);
 
         self.memory_store.clear_short_term(session_key);
-        {
-            let mut session_manager = self.session_manager.lock().await;
-            session_manager.clear(session_key)?;
-        }
+        self.session_manager.clear(session_key)?;
 
         if !messages.is_empty() {
             let this = self.clone();
@@ -241,8 +238,8 @@ impl AgentRuntime {
     }
 
     pub async fn get_history(&self, session_key: &SessionKey) -> Result<Session> {
-        let mut session_manager = self.session_manager.lock().await;
-        session_manager.get(session_key).map(|s| s.clone())
+        let session = self.session_manager.get(session_key)?;
+        Ok(session.lock().await.clone())
     }
 
     pub async fn submit(
@@ -262,8 +259,8 @@ impl AgentRuntime {
             "submitting user input"
         );
         let session = {
-            let mut session_manager = self.session_manager.lock().await;
-            session_manager.get_or_create(&session_key).clone()
+            let session_arc = self.session_manager.get_or_create(&session_key);
+            session_arc.lock().await.clone()
         };
         debug!(turn_count = session.turns.len(), "session loaded");
 
@@ -331,10 +328,9 @@ impl AgentRuntime {
             });
         }
 
-        {
-            let mut session_manager = self.session_manager.lock().await;
-            session_manager.append(&session_key, &user_input, result.as_str());
-        }
+        self.session_manager
+            .append(&session_key, &user_input, result.as_str())
+            .await;
         debug!("session history updated");
 
         let conversation = format!(
@@ -588,7 +584,7 @@ fn parse_extracted_facts(raw: &str) -> Result<Vec<(String, Vec<String>)>> {
                 return None;
             }
 
-            parse_extracted_facts_json(&trimmed[start ..= end])
+            parse_extracted_facts_json(&trimmed[start..=end])
         })
         .ok_or_else(|| anyhow::anyhow!("failed to parse extracted facts JSON: {}", raw))
 }

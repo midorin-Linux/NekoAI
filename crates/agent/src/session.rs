@@ -1,9 +1,12 @@
 use std::collections::VecDeque;
+use std::sync::Arc;
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
+use dashmap::DashMap;
 use nekoai_domain::agent::session::SessionKey;
 use rig::completion::Message;
+use tokio::sync::Mutex;
 use tracing::debug;
 
 #[derive(Clone)]
@@ -23,7 +26,7 @@ pub struct Session {
 }
 
 pub struct SessionManager {
-    sessions: VecDeque<Session>,
+    sessions: DashMap<SessionKey, Arc<Mutex<Session>>>,
     max_messages: usize,
 }
 
@@ -36,14 +39,16 @@ impl Default for SessionManager {
 impl SessionManager {
     pub fn new() -> Self {
         Self {
-            sessions: VecDeque::new(),
+            sessions: DashMap::new(),
             max_messages: 40,
         }
     }
 
-    pub fn append(&mut self, session_key: &SessionKey, user: &str, assistant: &str) {
+    pub async fn append(&self, session_key: &SessionKey, user: &str, assistant: &str) {
         let max_messages = self.max_messages;
-        let session = self.get_or_create(session_key);
+        let session_arc = self.get_or_create(session_key);
+        let mut session = session_arc.lock().await;
+
         session.turns.push_back(ConversationTurn {
             user: user.to_string(),
             assistant: assistant.to_string(),
@@ -69,52 +74,39 @@ impl SessionManager {
         );
     }
 
-    pub fn clear(&mut self, session_key: &SessionKey) -> Result<()> {
-        if let Some(index) = self
-            .sessions
-            .iter()
-            .position(|session| session.key == *session_key)
-        {
-            self.sessions.remove(index);
+    pub fn clear(&self, session_key: &SessionKey) -> Result<()> {
+        if self.sessions.remove(session_key).is_some() {
             debug!(session = %session_key.channel_id, "session cleared");
-            Ok(())
         } else {
             debug!(target_session = %session_key.channel_id, "non-existent session");
-            Ok(())
         }
+        Ok(())
     }
 
-    pub fn get_or_create(&mut self, session_key: &SessionKey) -> &mut Session {
-        if let Some(index) = self
-            .sessions
-            .iter()
-            .position(|session| session.key == *session_key)
-        {
-            return &mut self.sessions[index];
-        }
-
-        let now = Utc::now();
-        self.sessions.push_back(Session {
-            key: session_key.clone(),
-            messages: VecDeque::new(),
-            turns: VecDeque::new(),
-            created_at: now,
-            last_active: now,
-            token_count: 0,
-        });
-
-        debug!(session = %session_key.channel_id, "created new session");
-
-        self.sessions.back_mut().expect("session was just inserted")
-    }
-
-    pub fn get(&mut self, session_key: &SessionKey) -> Result<&mut Session> {
+    pub fn get_or_create(&self, session_key: &SessionKey) -> Arc<Mutex<Session>> {
         self.sessions
-            .iter()
-            .position(|session| session.key == *session_key)
-            .map(|index| {
+            .entry(session_key.clone())
+            .or_insert_with(|| {
+                debug!(session = %session_key.channel_id, "created new session");
+                let now = Utc::now();
+                Arc::new(Mutex::new(Session {
+                    key: session_key.clone(),
+                    messages: VecDeque::new(),
+                    turns: VecDeque::new(),
+                    created_at: now,
+                    last_active: now,
+                    token_count: 0,
+                }))
+            })
+            .clone()
+    }
+
+    pub fn get(&self, session_key: &SessionKey) -> Result<Arc<Mutex<Session>>> {
+        self.sessions
+            .get(session_key)
+            .map(|entry| {
                 debug!(session = %session_key.channel_id, "found existing session");
-                &mut self.sessions[index]
+                entry.value().clone()
             })
             .ok_or_else(|| {
                 debug!(target_session = %session_key.channel_id, "non-existent session");

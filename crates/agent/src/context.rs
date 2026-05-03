@@ -46,7 +46,7 @@ impl ContextManager {
         let max_turns = (self.max_tokens / 512).max(1);
         if turns.len() > max_turns {
             let drain_count = turns.len() - max_turns;
-            for _ in 0 .. drain_count {
+            for _ in 0..drain_count {
                 turns.pop_front();
             }
             debug!(
