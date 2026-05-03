@@ -343,9 +343,9 @@ impl AgentRuntime {
     }
 
     async fn generate_mid_term_summary(&self, messages: &[ShortTermEntry]) -> Result<String> {
-        let conversation = format_short_term_messages(messages);
+        let conversation = escape_xml(&format_short_term_messages(messages));
         let prompt = format!(
-            "以下は同一セッションの会話ログです。\n会話の流れと決定事項を保ちつつ、この会話の要点を3文で要約してください。\n箇条書きではなく自然な文章で出力し、3文以外は出力しないでください。\n\n会話ログ:\n{}",
+            "<summarization_task>\n  <instruction>The following is a conversation log from the same session. Please summarize the main points of this conversation in three sentences, while preserving the flow of the conversation and the decisions made. Please use natural sentences, not bullet points, and do not include any more than three sentences.<instruction>\n  <conversation_log>{}</conversation_log>\n</summarization_task>",
             conversation
         );
 
@@ -421,6 +421,16 @@ fn role_label(role: &Role) -> &'static str {
     }
 }
 
+fn escape_xml(input: &str) -> String {
+    input
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
+
 async fn extract_and_store_long_term_facts(
     provider: Arc<OpenAICompatibleAdapter>,
     memory_store: Arc<MemoryStore>,
@@ -431,7 +441,7 @@ async fn extract_and_store_long_term_facts(
     response: String,
 ) -> Result<()> {
     let prompt = format!(
-        "以下の応答から、将来の会話で参照すべき重要な情報があれば JSON で出力してください。\nなければ空配列を返してください。\n\n形式: [{{\"fact\": \"...\", \"tags\": [\"...\"]}}]\n\n応答: {}",
+        "<long_term_extraction_task>\n  <instruction>以下の応答から、将来の会話で参照すべき重要な情報があれば JSON で出力してください。なければ空配列を返してください。</instruction>\n  <output_format>[{{\"fact\":\" ... \",\"tags\":[\" ... \"]}}]</output_format>\n  <response>{}</response>\n</long_term extraction_task>",
         response
     );
 

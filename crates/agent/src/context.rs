@@ -71,8 +71,6 @@ impl ContextManager {
         caller_user_id: Option<String>,
         caller_guild_id: Option<u64>,
     ) -> String {
-        let mut prompt = self.base_system_prompt.clone();
-
         let user_id = caller_user_id.unwrap_or_else(|| "unknown".to_string());
         let guild_id = caller_guild_id
             .map(|id| id.to_string())
@@ -83,7 +81,8 @@ impl ContextManager {
             .map(|_| "unknown".to_string())
             .unwrap_or_else(|| "unknown".to_string());
 
-        prompt = prompt
+        let base_system_prompt = self
+            .base_system_prompt
             .replace("{guild_name}", "unknown")
             .replace("{channel_name}", "unknown")
             .replace("{category}", "unknown")
@@ -93,25 +92,46 @@ impl ContextManager {
             .replace("{channel_id}", &channel_id)
             .replace("{roles}", "unknown");
 
+        let mut prompt = String::from("<nekoai_prompt>\n");
+        prompt.push_str("  <system_instruction>");
+        prompt.push_str(&escape_xml(&base_system_prompt));
+        prompt.push_str("</system_instruction>\n");
+        prompt.push_str("  <caller_context>\n");
+        prompt.push_str(&format!("    <guild_id>{}</guild_id>\n", guild_id));
+        prompt.push_str(&format!("    <channel_id>{}</channel_id>\n", channel_id));
+        prompt.push_str(&format!("    <user_id>{}</user_id>\n", user_id));
+        prompt.push_str("  </caller_context>\n");
+
         if !recalled.long_term.is_empty() {
-            prompt.push_str("\n\n<ImportantMemories>\n");
+            prompt.push_str("  <important_memories>\n");
             for mem in &recalled.long_term {
-                prompt.push_str(&format!("  <Memory>{}</Memory>\n", mem.content));
+                prompt.push_str("    <memory>");
+                prompt.push_str(&escape_xml(&mem.content));
+                prompt.push_str("</memory>\n");
             }
-            prompt.push_str("\n\n</ImportantMemories>\n");
+            prompt.push_str("  </important_memories>\n");
         }
 
         if !recalled.mid_term.is_empty() {
-            prompt.push_str("\n\n<PastConversations>\n");
+            prompt.push_str("  <past_conversations>\n");
             for summary in &recalled.mid_term {
-                prompt.push_str(&format!(
-                    "<Conversation>{}</Conversation>\n",
-                    summary.content
-                ));
+                prompt.push_str("    <conversation>");
+                prompt.push_str(&escape_xml(&summary.content));
+                prompt.push_str("</conversation>\n");
             }
-            prompt.push_str("\n\n</PastConversations>\n");
+            prompt.push_str("  </past_conversations>\n");
         }
 
+        prompt.push_str("</nekoai_prompt>");
         prompt
     }
+}
+
+fn escape_xml(input: &str) -> String {
+    input
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
 }
