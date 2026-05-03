@@ -441,7 +441,7 @@ async fn extract_and_store_long_term_facts(
     response: String,
 ) -> Result<()> {
     let prompt = format!(
-        "<long_term_extraction_task>\n  <instruction>以下の応答から、将来の会話で参照すべき重要な情報があれば JSON で出力してください。なければ空配列を返してください。</instruction>\n  <output_format>[{{\"fact\":\" ... \",\"tags\":[\" ... \"]}}]</output_format>\n  <response>{}</response>\n</long_term extraction_task>",
+        "<long_term_extraction_task>\n  <instruction>Please output any important information from the following response in JSON format, which should be referenced in future conversations. Otherwise, return an empty array.</instruction>\n  <output_format>[{{\"fact\":\" ... \",\"tags\":[\" ... \"]}}]</output_format>\n  <response>{}</response>\n</long_term extraction_task>",
         response
     );
 
