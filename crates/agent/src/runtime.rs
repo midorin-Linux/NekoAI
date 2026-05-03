@@ -430,7 +430,6 @@ fn escape_xml(input: &str) -> String {
         .replace('\'', "&apos;")
 }
 
-
 async fn extract_and_store_long_term_facts(
     provider: Arc<OpenAICompatibleAdapter>,
     memory_store: Arc<MemoryStore>,
