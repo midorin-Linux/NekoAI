@@ -10,6 +10,7 @@ use crate::discord::{
         err, get_bool, get_channel_id, get_guild_id_default, get_message_id, get_string, get_u16,
         get_user_id, ok, parse_auto_archive_duration, parse_thread_type, to_value,
     },
+    permission::require_current_user_admin_for_channel,
 };
 
 pub struct CreateDiscordThread {
@@ -76,6 +77,9 @@ impl Tool for CreateDiscordThread {
         let Some(channel_id) = get_channel_id(&args, "channel_id") else {
             return Ok(err("channel_id is required"));
         };
+        if let Err(message) = require_current_user_admin_for_channel(&self.http, channel_id).await {
+            return Ok(err(message));
+        }
         let Some(name) = get_string(&args, "name") else {
             return Ok(err("name is required"));
         };
@@ -136,6 +140,9 @@ impl Tool for DeleteDiscordThread {
         let Some(thread_id) = get_channel_id(&args, "thread_id") else {
             return Ok(err("thread_id is required"));
         };
+        if let Err(message) = require_current_user_admin_for_channel(&self.http, thread_id).await {
+            return Ok(err(message));
+        }
         match thread_id.delete(&self.http).await {
             Ok(channel) => Ok(ok(to_value(&channel))),
             Err(error) => Ok(err(format!("Failed to delete thread: {error}"))),
@@ -197,6 +204,9 @@ impl Tool for AddDiscordThreadMember {
         let Some(thread_id) = get_channel_id(&args, "thread_id") else {
             return Ok(err("thread_id is required"));
         };
+        if let Err(message) = require_current_user_admin_for_channel(&self.http, thread_id).await {
+            return Ok(err(message));
+        }
         let Some(user_id) = get_user_id(&args, "user_id") else {
             return Ok(err("user_id is required"));
         };

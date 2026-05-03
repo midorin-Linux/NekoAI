@@ -95,6 +95,7 @@ impl Tool for CreateDiscordInvite {
         let Some(channel_id) = get_channel_id(&args, "channel_id") else {
             return Ok(err("channel_id is required"));
         };
+        crate::admin_guard_channel!(&self.http, channel_id);
 
         let mut builder = CreateInvite::new();
         if let Some(max_age) = get_u32(&args, "max_age") {
@@ -139,6 +140,7 @@ impl Tool for DeleteDiscordInvite {
         let Some(code) = get_string(&args, "code") else {
             return Ok(err("code is required"));
         };
+        crate::admin_guard_invite!(&self.http, code.as_str());
         match self.http.delete_invite(code.as_str(), None).await {
             Ok(invite) => Ok(ok(to_value(&invite))),
             Err(error) => Ok(err(format!("Failed to delete invite: {error}"))),

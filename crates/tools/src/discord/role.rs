@@ -136,6 +136,7 @@ impl Tool for CreateDiscordRole {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
+        crate::admin_guard_guild!(&self.http, guild_id);
 
         let name = get_string(&args, "name").unwrap_or_else(|| "New Role".to_string());
         let permissions = get_u64(&args, "permissions").unwrap_or(0);
@@ -186,6 +187,7 @@ impl Tool for DeleteDiscordRole {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
+        crate::admin_guard_guild!(&self.http, guild_id);
         let Some(role_id) = get_u64(&args, "role_id").map(RoleId::new) else {
             return Ok(err("role_id is required"));
         };
@@ -227,6 +229,7 @@ impl Tool for ModifyDiscordRole {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
+        crate::admin_guard_guild!(&self.http, guild_id);
         let Some(role_id) = get_u64(&args, "role_id").map(RoleId::new) else {
             return Ok(err("role_id is required"));
         };
@@ -292,6 +295,7 @@ impl Tool for AddDiscordRoleToMember {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
+        crate::admin_guard_guild!(&self.http, guild_id);
         let Some(user_id) = get_user_id(&args, "user_id") else {
             return Ok(err("user_id is required"));
         };
@@ -335,6 +339,7 @@ impl Tool for RemoveDiscordRoleFromMember {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
+        crate::admin_guard_guild!(&self.http, guild_id);
         let Some(user_id) = get_user_id(&args, "user_id") else {
             return Ok(err("user_id is required"));
         };

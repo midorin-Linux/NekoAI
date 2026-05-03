@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use nekoai_config::loader::{Config, Parameters};
-use nekoai_domain::agent::session::SessionKey;
+use nekoai_domain::agent::{
+    runtime::{CallerContext, with_caller_context},
+    session::SessionKey,
+};
 use nekoai_memory::{
     short_term::{Role, ShortTermEntry},
     store::MemoryStore,
@@ -221,6 +224,11 @@ impl AgentRuntime {
         user_id: Option<String>,
         user_input: String,
     ) -> Result<AgentResponse> {
+        let caller_context = CallerContext {
+            user_id: user_id.as_ref().and_then(|id| id.parse::<u64>().ok()),
+            guild_id: session_key.guild_id.map(|id| id.get()),
+        };
+
         info!(
             session = %session_key.channel_id,
             input_len = user_input.len(),
@@ -236,7 +244,13 @@ impl AgentRuntime {
 
         let context = self
             .context_manager
-            .build(&session, &user_input, &recalled)
+            .build(
+                &session,
+                &user_input,
+                &recalled,
+                user_id.clone(),
+                session_key.guild_id.map(|id| id.get()),
+            )
             .await;
         debug!(context_turns = context.turns.len(), "context built");
 
@@ -262,9 +276,12 @@ impl AgentRuntime {
             "prompt composed"
         );
 
-        let result = agent
-            .chat(context.user_message.as_str(), chat_history)
-            .await?;
+        let result = with_caller_context(caller_context, async {
+            agent
+                .chat(context.user_message.as_str(), chat_history)
+                .await
+        })
+        .await?;
         info!(response_len = result.len(), "received model response");
 
         self.memory_store

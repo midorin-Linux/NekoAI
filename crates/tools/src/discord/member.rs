@@ -13,6 +13,7 @@ use crate::discord::{
         err, get_bool, get_channel_id, get_guild_id_default, get_string, get_u8, get_u32, get_u64,
         get_u64_list, get_user_id, ok, parse_timestamp, to_value,
     },
+    permission::require_current_user_admin,
 };
 
 pub struct GetDiscordMemberList {
@@ -179,6 +180,9 @@ impl Tool for KickDiscordMember {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
+        if let Err(message) = require_current_user_admin(&self.http, guild_id).await {
+            return Ok(err(message));
+        }
         let Some(user_id) = get_user_id(&args, "user_id") else {
             return Ok(err("user_id is required"));
         };
@@ -221,6 +225,9 @@ impl Tool for BanDiscordMember {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
+        if let Err(message) = require_current_user_admin(&self.http, guild_id).await {
+            return Ok(err(message));
+        }
         let Some(user_id) = get_user_id(&args, "user_id") else {
             return Ok(err("user_id is required"));
         };
@@ -305,6 +312,9 @@ impl Tool for BulkBanDiscordMembers {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
+        if let Err(message) = require_current_user_admin(&self.http, guild_id).await {
+            return Ok(err(message));
+        }
         let Some(user_ids) = get_u64_list(&args, "user_ids") else {
             return Ok(err("user_ids is required"));
         };
@@ -360,6 +370,9 @@ impl Tool for ModifyDiscordMember {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
+        if let Err(message) = require_current_user_admin(&self.http, guild_id).await {
+            return Ok(err(message));
+        }
         let Some(user_id) = get_user_id(&args, "user_id") else {
             return Ok(err("user_id is required"));
         };
@@ -441,6 +454,9 @@ impl Tool for TimeoutDiscordMember {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
+        if let Err(message) = require_current_user_admin(&self.http, guild_id).await {
+            return Ok(err(message));
+        }
         let Some(user_id) = get_user_id(&args, "user_id") else {
             return Ok(err("user_id is required"));
         };

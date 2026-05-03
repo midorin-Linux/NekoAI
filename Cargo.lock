@@ -1864,6 +1864,7 @@ version = "1.0.0"
 dependencies = [
  "rig-core",
  "serenity",
+ "tokio",
 ]
 
 [[package]]
@@ -1915,11 +1916,13 @@ dependencies = [
 name = "nekoai-tools"
 version = "1.0.0"
 dependencies = [
+ "nekoai-domain",
  "rig-core",
  "serde",
  "serde_json",
  "serenity",
  "thiserror 2.0.18",
+ "tokio",
  "tracing",
 ]
 

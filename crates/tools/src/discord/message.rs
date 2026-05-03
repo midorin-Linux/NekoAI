@@ -248,6 +248,7 @@ impl Tool for EditDiscordMessage {
         let Some(channel_id) = get_channel_id(&args, "channel_id") else {
             return Ok(err("channel_id is required"));
         };
+        crate::admin_guard_channel!(&self.http, channel_id);
         let Some(message_id) = get_message_id(&args, "message_id") else {
             return Ok(err("message_id is required"));
         };
@@ -293,6 +294,7 @@ impl Tool for DeleteDiscordMessage {
         let Some(channel_id) = get_channel_id(&args, "channel_id") else {
             return Ok(err("channel_id is required"));
         };
+        crate::admin_guard_channel!(&self.http, channel_id);
         let Some(message_id) = get_message_id(&args, "message_id") else {
             return Ok(err("message_id is required"));
         };
@@ -367,6 +369,7 @@ impl Tool for BulkDeleteDiscordMessages {
         let Some(channel_id) = get_channel_id(&args, "channel_id") else {
             return Ok(err("channel_id is required"));
         };
+        crate::admin_guard_channel!(&self.http, channel_id);
         let Some(message_ids) = get_u64_list(&args, "message_ids") else {
             return Ok(err("message_ids is required"));
         };
@@ -460,6 +463,7 @@ impl Tool for PinDiscordMessage {
         let Some(channel_id) = get_channel_id(&args, "channel_id") else {
             return Ok(err("channel_id is required"));
         };
+        crate::admin_guard_channel!(&self.http, channel_id);
         let Some(message_id) = get_message_id(&args, "message_id") else {
             return Ok(err("message_id is required"));
         };
@@ -497,6 +501,7 @@ impl Tool for UnpinDiscordMessage {
         let Some(channel_id) = get_channel_id(&args, "channel_id") else {
             return Ok(err("channel_id is required"));
         };
+        crate::admin_guard_channel!(&self.http, channel_id);
         let Some(message_id) = get_message_id(&args, "message_id") else {
             return Ok(err("message_id is required"));
         };

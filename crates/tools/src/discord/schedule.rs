@@ -114,6 +114,7 @@ impl Tool for CreateDiscordScheduledEvent {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
+        crate::admin_guard_guild!(&self.http, guild_id);
         let Some(name) = get_string(&args, "name") else {
             return Ok(err("name is required"));
         };
@@ -178,6 +179,7 @@ impl Tool for ModifyDiscordScheduledEvent {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
+        crate::admin_guard_guild!(&self.http, guild_id);
         let Some(event_id) = get_u64(&args, "event_id").map(ScheduledEventId::new) else {
             return Ok(err("event_id is required"));
         };
@@ -257,6 +259,7 @@ impl Tool for DeleteDiscordScheduledEvent {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
+        crate::admin_guard_guild!(&self.http, guild_id);
         let Some(event_id) = get_u64(&args, "event_id").map(ScheduledEventId::new) else {
             return Ok(err("event_id is required"));
         };

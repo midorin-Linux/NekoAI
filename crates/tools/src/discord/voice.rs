@@ -69,6 +69,7 @@ impl Tool for MoveDiscordMemberVoice {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
+        crate::admin_guard_guild!(&self.http, guild_id);
         let Some(user_id) = get_user_id(&args, "user_id") else {
             return Ok(err("user_id is required"));
         };
@@ -108,6 +109,7 @@ impl Tool for DisconnectDiscordMemberVoice {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
+        crate::admin_guard_guild!(&self.http, guild_id);
         let Some(user_id) = get_user_id(&args, "user_id") else {
             return Ok(err("user_id is required"));
         };
@@ -145,6 +147,7 @@ impl Tool for MuteDiscordMember {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
+        crate::admin_guard_guild!(&self.http, guild_id);
         let Some(user_id) = get_user_id(&args, "user_id") else {
             return Ok(err("user_id is required"));
         };
@@ -188,6 +191,7 @@ impl Tool for DeafenDiscordMember {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
+        crate::admin_guard_guild!(&self.http, guild_id);
         let Some(user_id) = get_user_id(&args, "user_id") else {
             return Ok(err("user_id is required"));
         };

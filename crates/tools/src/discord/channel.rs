@@ -99,6 +99,7 @@ impl Tool for CreateDiscordChannel {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
+        crate::admin_guard_guild!(&self.http, guild_id);
         let Some(name) = get_string(&args, "name") else {
             return Ok(err("name is required"));
         };
@@ -162,6 +163,7 @@ impl Tool for DeleteDiscordChannel {
         let Some(channel_id) = get_channel_id(&args, "channel_id") else {
             return Ok(err("channel_id is required"));
         };
+        crate::admin_guard_channel!(&self.http, channel_id);
 
         match channel_id.delete(&self.http).await {
             Ok(channel) => Ok(ok(to_value(&channel))),
@@ -204,6 +206,7 @@ impl Tool for ModifyDiscordChannel {
         let Some(channel_id) = get_channel_id(&args, "channel_id") else {
             return Ok(err("channel_id is required"));
         };
+        crate::admin_guard_channel!(&self.http, channel_id);
 
         let mut builder = EditChannel::new();
         let mut changed = false;

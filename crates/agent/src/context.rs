@@ -32,6 +32,8 @@ impl ContextManager {
         session: &Session,
         input: &str,
         recalled_memory: &RecalledMemory,
+        caller_user_id: Option<String>,
+        caller_guild_id: Option<u64>,
     ) -> Context {
         debug!(
             input_len = input.len(),
@@ -53,7 +55,8 @@ impl ContextManager {
             );
         }
 
-        let system_prompt = self.build_system_prompt_with_memory(recalled_memory);
+        let system_prompt =
+            self.build_system_prompt_with_memory(recalled_memory, caller_user_id, caller_guild_id);
 
         Context {
             system_prompt,
@@ -62,8 +65,33 @@ impl ContextManager {
         }
     }
 
-    fn build_system_prompt_with_memory(&self, recalled: &RecalledMemory) -> String {
+    fn build_system_prompt_with_memory(
+        &self,
+        recalled: &RecalledMemory,
+        caller_user_id: Option<String>,
+        caller_guild_id: Option<u64>,
+    ) -> String {
         let mut prompt = self.base_system_prompt.clone();
+
+        let user_id = caller_user_id.unwrap_or_else(|| "unknown".to_string());
+        let guild_id = caller_guild_id
+            .map(|id| id.to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+        let channel_id = recalled
+            .mid_term
+            .first()
+            .map(|_| "unknown".to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+
+        prompt = prompt
+            .replace("{guild_name}", "unknown")
+            .replace("{channel_name}", "unknown")
+            .replace("{category}", "unknown")
+            .replace("{user_name}", "unknown")
+            .replace("{user_id}", &user_id)
+            .replace("{guild_id}", &guild_id)
+            .replace("{channel_id}", &channel_id)
+            .replace("{roles}", "unknown");
 
         if !recalled.long_term.is_empty() {
             prompt.push_str("\n\n<ImportantMemories>\n");

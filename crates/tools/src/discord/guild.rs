@@ -151,6 +151,7 @@ impl Tool for ModifyDiscordGuild {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
+        crate::admin_guard_guild!(&self.http, guild_id);
 
         let mut builder = EditGuild::new();
         let mut changed = false;

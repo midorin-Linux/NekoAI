@@ -98,6 +98,7 @@ impl Tool for CreateDiscordEmoji {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
+        crate::admin_guard_guild!(&self.http, guild_id);
         let Some(name) = get_string(&args, "name") else {
             return Ok(err("name is required"));
         };
@@ -140,6 +141,7 @@ impl Tool for DeleteDiscordEmoji {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
+        crate::admin_guard_guild!(&self.http, guild_id);
         let Some(emoji_id) = get_u64(&args, "emoji_id").map(EmojiId::new) else {
             return Ok(err("emoji_id is required"));
         };

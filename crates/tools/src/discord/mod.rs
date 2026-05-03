@@ -12,6 +12,7 @@ pub(crate) mod helpers;
 pub mod invite;
 pub mod member;
 pub mod message;
+pub mod permission;
 pub mod role;
 pub mod schedule;
 pub mod thread;
