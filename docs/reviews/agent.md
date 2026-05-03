@@ -38,7 +38,7 @@
   - `tokio::time::timeout` を各 API 呼び出しに適用
   - タイムアウト時は短期記憶更新を行わず、ユーザーへ再試行可能なメッセージを返す
 
-### 5. [Low] 未使用状態が残っている
+### 5. [Low] 未使用状態が残っている (不要)
 - 該当: `crates/agent/src/context.rs:17`, `crates/agent/src/session.rs:22`
 - `compaction_threshold` / `token_count` が実際の制御に使われていません。
 - 修正案:

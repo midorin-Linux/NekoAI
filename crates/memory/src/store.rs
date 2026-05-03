@@ -263,4 +263,17 @@ impl MemoryStore {
 
         info!("started mid-term cleanup job (runs daily)");
     }
+
+    pub async fn promote_to_mid_term_with_messages(
+        &self,
+        session_key: &SessionKey,
+        messages: &[ShortTermEntry],
+        summary: String,
+    ) -> Result<()> {
+        self.mid_term
+            .store_summary(session_key, messages, summary)
+            .await?;
+        self.short_term_memory.clear(session_key);
+        Ok(())
+    }
 }

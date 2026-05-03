@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use dashmap::DashMap;
 use nekoai_config::loader::{Config, Parameters};
 use nekoai_domain::agent::{
     runtime::{CallerContext, with_caller_context},
@@ -76,6 +77,7 @@ pub struct AgentRuntime {
     agent_parameters: Parameters,
     extraction_tx: mpsc::Sender<ExtractionTask>,
     tool_server_handle: ToolServerHandle,
+    summarizing: Arc<DashMap<SessionKey, ()>>,
 }
 
 impl AgentRuntime {
@@ -137,6 +139,8 @@ impl AgentRuntime {
 
         let semaphore = Arc::new(Semaphore::new(EXTRACTION_CONCURRENT_LIMIT));
 
+        let summarizing = Arc::new(DashMap::new());
+
         let provider_clone = provider.clone();
         let memory_store_clone = memory_store.clone();
         let model_clone = agent_model_name.clone();
@@ -172,12 +176,18 @@ impl AgentRuntime {
             agent_parameters,
             extraction_tx,
             tool_server_handle,
+            summarizing
         })
     }
 
     pub async fn clear_session(&self, session_key: &SessionKey) -> Result<()> {
-        // Capture messages before clearing so background summarization has data.
         let messages = self.memory_store.get_short_term_messages(session_key);
+
+        self.memory_store.clear_short_term(session_key);
+        {
+            let mut session_manager = self.session_manager.lock().await;
+            session_manager.clear(session_key)?;
+        }
 
         if !messages.is_empty() {
             let this = self.clone();
@@ -185,32 +195,30 @@ impl AgentRuntime {
             tokio::spawn(async move {
                 match this.generate_mid_term_summary(&messages).await {
                     Ok(summary) => {
-                        this.memory_store
-                            .promote_to_mid_term(&session_key, summary)
+                        if let Err(error) = this
+                            .memory_store
+                            .promote_to_mid_term_with_messages(&session_key, &messages, summary)
                             .await
-                            .unwrap_or_else(|error| {
-                                warn!(
-                                    session = %session_key.channel_id,
-                                    error = %error,
-                                    "failed to store mid-term summary during clear"
-                                );
-                            });
+                        {
+                            warn!(
+                            session = %session_key.channel_id,
+                            error = %error,
+                            "failed to store mid-term summary during clear"
+                        );
+                        }
                     }
                     Err(error) => {
                         warn!(
-                            session = %session_key.channel_id,
-                            error = %error,
-                            "failed to generate mid-term summary during clear"
-                        );
+                        session = %session_key.channel_id,
+                        error = %error,
+                        "failed to generate mid-term summary during clear"
+                    );
                     }
                 }
             });
         }
 
-        self.memory_store.clear_short_term(session_key);
-
-        let mut session_manager = self.session_manager.lock().await;
-        session_manager.clear(session_key)
+        Ok(())
     }
 
     pub async fn get_history(&self, session_key: &SessionKey) -> Result<Session> {
@@ -289,15 +297,19 @@ impl AgentRuntime {
         debug!("short-term memory updated");
 
         if self.memory_store.should_summarize(&session_key)
-            && let Err(error) = self
-                .promote_short_term_to_mid_term(&session_key, "compression_threshold")
-                .await
+            && self.summarizing.insert(session_key.clone(), ()).is_none()
         {
-            warn!(
-                session = %session_key.channel_id,
-                error = %error,
-                "failed to promote short-term memory at compression threshold"
-            );
+            let this = self.clone();
+            let key = session_key.clone();
+            tokio::spawn(async move {
+                if let Err(error) = this
+                    .promote_short_term_to_mid_term(&key, "compression_threshold")
+                    .await
+                {
+                    warn!(session = %key.channel_id, error = %error, "background promote failed");
+                }
+                this.summarizing.remove(&key);
+            });
         }
 
         {

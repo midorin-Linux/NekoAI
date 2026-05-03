@@ -24,6 +24,7 @@ impl OpenAICompatibleAdapter {
             .agent(model)
             .max_tokens(parameters.max_token)
             .temperature(parameters.temperature)
+            .default_max_turns(20)
             .additional_params(json!({
                 "top_p": parameters.top_p,
             }))
