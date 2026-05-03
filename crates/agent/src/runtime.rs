@@ -318,7 +318,8 @@ impl AgentRuntime {
         }
         debug!("session history updated");
 
-        self.spawn_long_term_extraction(session_key.clone(), user_id, result.clone());
+        let conversation = format!("<user_content>{}<user_content>\n<assistant_content>{}<assistant_content>\n", user_input, result);
+        self.spawn_long_term_extraction(session_key.clone(), user_id, conversation);
 
         Ok(AgentResponse { content: result })
     }
@@ -453,7 +454,7 @@ async fn extract_and_store_long_term_facts(
 ) -> Result<()> {
     let prompt = format!(
         "<long_term_extraction_task>\n  <instruction>Please output any important information from the following response in JSON format, which should be referenced in future conversations. Otherwise, return an empty array.</instruction>\n  <output_format>[{{\"fact\":\" ... \",\"tags\":[\" ... \"]}}]</output_format>\n  <response>{}</response>\n</long_term extraction_task>",
-        response
+        escape_xml(&response)
     );
 
     let retry_strategy = tokio_retry::strategy::FixedInterval::from_millis(1000).take(1);
