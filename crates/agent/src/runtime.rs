@@ -321,10 +321,7 @@ impl AgentRuntime {
                         .preamble(sp.as_str())
                         .tool_server_handle(th)
                         .build();
-                    agent.prompt(&um)
-                        .max_turns(20)
-                        .with_history(ch)
-                        .await
+                    agent.prompt(&um).max_turns(20).with_history(ch).await
                 }
             })
             .await

@@ -1,14 +1,22 @@
+use std::fmt as stdfmt;
+
 use anyhow::{Context, Result, bail};
 use chrono::Local;
-use std::fmt as stdfmt;
-use tracing::{Event, Subscriber, field::{Field, Visit}, info};
-use tracing_subscriber::{
-    EnvFilter,
-    fmt::{FmtContext, format::{FormatEvent, FormatFields, Writer}},
-    registry::LookupSpan,
+use tracing::{
+    Event, Subscriber,
+    field::{Field, Visit},
+    info,
 };
 pub use tracing_appender::non_blocking::WorkerGuard;
 use tracing_appender::{non_blocking, rolling};
+use tracing_subscriber::{
+    EnvFilter,
+    fmt::{
+        FmtContext,
+        format::{FormatEvent, FormatFields, Writer},
+    },
+    registry::LookupSpan,
+};
 
 const MAX_FIELD_VALUE_LEN: usize = 100;
 
@@ -82,23 +90,28 @@ impl Visit for TruncatingVisitor {
     }
 
     fn record_str(&mut self, field: &Field, value: &str) {
-        self.fields.push((field.name().to_string(), truncate_value(value)));
+        self.fields
+            .push((field.name().to_string(), truncate_value(value)));
     }
 
     fn record_bool(&mut self, field: &Field, value: bool) {
-        self.fields.push((field.name().to_string(), value.to_string()));
+        self.fields
+            .push((field.name().to_string(), value.to_string()));
     }
 
     fn record_i64(&mut self, field: &Field, value: i64) {
-        self.fields.push((field.name().to_string(), value.to_string()));
+        self.fields
+            .push((field.name().to_string(), value.to_string()));
     }
 
     fn record_u64(&mut self, field: &Field, value: u64) {
-        self.fields.push((field.name().to_string(), value.to_string()));
+        self.fields
+            .push((field.name().to_string(), value.to_string()));
     }
 
     fn record_f64(&mut self, field: &Field, value: f64) {
-        self.fields.push((field.name().to_string(), value.to_string()));
+        self.fields
+            .push((field.name().to_string(), value.to_string()));
     }
 }
 
