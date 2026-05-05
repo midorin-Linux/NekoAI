@@ -1,5 +1,6 @@
 use std::{str::FromStr, time::Duration};
 
+use chrono::Utc;
 use serde::Serialize;
 use serde_json::{Value, json};
 use serenity::all::{
@@ -213,4 +214,55 @@ where
     Fut: std::future::Future<Output = serenity::Result<T>>,
 {
     Retry::spawn(discord_retry_strategy(), f).await
+}
+
+pub fn parse_relative_time(duration_str: &str) -> Option<Duration> {
+    let duration_str = duration_str.trim().to_lowercase();
+    if duration_str.is_empty() {
+        return None;
+    }
+
+    let mut total_secs = 0;
+    let mut current_num = String::new();
+
+    for c in duration_str.chars() {
+        if c.is_ascii_digit() {
+            current_num.push(c);
+        } else {
+            let num: u64 = current_num.parse().unwrap_or(0);
+            match c {
+                's' => total_secs += num,
+                'm' => total_secs += num * 60,
+                'h' => total_secs += num * 3600,
+                'd' => total_secs += num * 86400,
+                'w' => total_secs += num * 604800,
+                _ => return None, // Invalid format
+            }
+            current_num.clear();
+        }
+    }
+
+    if !current_num.is_empty() {
+        // If it ends with just a number, assume seconds if the string was pure numbers, or error otherwise.
+        if duration_str.chars().all(|c| c.is_ascii_digit()) {
+            total_secs += current_num.parse::<u64>().unwrap_or(0);
+        } else {
+            return None;
+        }
+    }
+
+    if total_secs == 0 {
+        None
+    } else {
+        Some(Duration::from_secs(total_secs))
+    }
+}
+
+pub fn resolve_relative_timestamp(duration_str: &str) -> Option<Timestamp> {
+    if duration_str == "clear" {
+        return None;
+    }
+    let duration = parse_relative_time(duration_str)?;
+    let future_time = Utc::now() + duration;
+    Timestamp::parse(&future_time.to_rfc3339()).ok()
 }

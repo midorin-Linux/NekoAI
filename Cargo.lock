@@ -1918,7 +1918,7 @@ dependencies = [
 name = "nekoai-tools"
 version = "1.0.0"
 dependencies = [
- "futures",
+ "chrono",
  "nekoai-domain",
  "rig-core",
  "serde",

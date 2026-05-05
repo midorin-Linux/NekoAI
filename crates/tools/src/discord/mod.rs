@@ -20,8 +20,3 @@ pub mod voice;
 
 pub use error::DiscordToolError;
 pub use message::{SendDiscordMessage, SendMessageArgs, SendMessageOutput};
-pub use voice::{
-    BulkMoveVoiceMembers, BulkSetMembersVoiceState, DeafenDiscordMember, DisconnectAllVoiceMembers,
-    DisconnectDiscordMemberVoice, GatherMembersByRoleVoice, GetVoiceChannelStates,
-    MoveAllVoiceMembers, MoveDiscordMemberVoice, MuteDiscordMember, SetChannelMuteState,
-};
