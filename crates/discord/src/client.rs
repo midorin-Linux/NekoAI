@@ -9,7 +9,11 @@ use nekoai_tools::discord::{
         ModifyDiscordChannel,
     },
     emoji::{CreateDiscordEmoji, DeleteDiscordEmoji, GetDiscordEmojiList, GetDiscordStickerList},
-    guild::{GetDiscordAuditLog, GetDiscordGuildInfo, GetDiscordGuildList, ModifyDiscordGuild},
+    guild::{
+        AnalyzeGuildActivity, ApplyGuildSecurityPreset, AuditGuildPermissions, GetDiscordAuditLog,
+        GetDiscordGuildInfo, GetDiscordGuildList, GetGuildSummary, ModifyDiscordGuild,
+        SetupGuildStructure, SummarizeAuditLog,
+    },
     invite::{CreateDiscordInvite, DeleteDiscordInvite, GetDiscordInviteList},
     member::{
         BanDiscordMember, BulkBanDiscordMembers, GetDiscordMemberInfo, GetDiscordMemberList,
@@ -32,8 +36,10 @@ use nekoai_tools::discord::{
         AddDiscordThreadMember, CreateDiscordThread, DeleteDiscordThread, GetDiscordThreadList,
     },
     voice::{
-        DeafenDiscordMember, DisconnectDiscordMemberVoice, MoveDiscordMemberVoice,
-        MuteDiscordMember,
+        BulkMoveVoiceMembers, BulkSetMembersVoiceState, DeafenDiscordMember,
+        DisconnectAllVoiceMembers, DisconnectDiscordMemberVoice, GatherMembersByRoleVoice,
+        GetVoiceChannelStates, MoveAllVoiceMembers, MoveDiscordMemberVoice, MuteDiscordMember,
+        SetChannelMuteState,
     },
 };
 use serenity::{http::Http, prelude::*};
@@ -111,6 +117,13 @@ impl DiscordClient {
             GetDiscordGuildList::new(http.clone()),
             ModifyDiscordGuild::new(http.clone()),
             GetDiscordAuditLog::new(http.clone()),
+            // High-level tools
+            GetGuildSummary::new(http.clone()),
+            SummarizeAuditLog::new(http.clone()),
+            AnalyzeGuildActivity::new(http.clone()),
+            ApplyGuildSecurityPreset::new(http.clone()),
+            AuditGuildPermissions::new(http.clone()),
+            SetupGuildStructure::new(http.clone()),
         );
 
         register_tools!(
@@ -145,6 +158,16 @@ impl DiscordClient {
             DisconnectDiscordMemberVoice::new(http.clone()),
             MuteDiscordMember::new(http.clone()),
             DeafenDiscordMember::new(http.clone()),
+        );
+
+        register_tools!(
+            GetVoiceChannelStates::new(http.clone()),
+            MoveAllVoiceMembers::new(http.clone()),
+            DisconnectAllVoiceMembers::new(http.clone()),
+            SetChannelMuteState::new(http.clone()),
+            BulkMoveVoiceMembers::new(http.clone()),
+            BulkSetMembersVoiceState::new(http.clone()),
+            GatherMembersByRoleVoice::new(http.clone()),
         );
 
         register_tools!(
