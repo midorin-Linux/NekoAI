@@ -12,7 +12,7 @@ use nekoai_memory::{
     store::MemoryStore,
 };
 use rig::{
-    completion::{Chat, Message, Prompt},
+    completion::{Message, Prompt},
     tool::{
         ToolDyn,
         server::{ToolServer, ToolServerHandle},
@@ -321,7 +321,10 @@ impl AgentRuntime {
                         .preamble(sp.as_str())
                         .tool_server_handle(th)
                         .build();
-                    agent.chat(&um, ch).await
+                    agent.prompt(&um)
+                        .max_turns(20)
+                        .with_history(ch)
+                        .await
                 }
             })
             .await
