@@ -1,14 +1,14 @@
 [workspace]
 members = [
-    "crates/agent",
-    "crates/cli",
-    "crates/config",
-    "crates/discord",
-    "crates/domain",
-    "crates/infra",
-    "crates/memory",
-    "crates/setup",
-    "crates/tools"
+    "nekoai-rs/agent",
+    "nekoai-rs/cli",
+    "nekoai-rs/config",
+    "nekoai-rs/discord",
+    "nekoai-rs/domain",
+    "nekoai-rs/infra",
+    "nekoai-rs/memory",
+    "nekoai-rs/setup",
+    "nekoai-rs/tools"
 ]
 resolver = "2"
 
@@ -18,15 +18,15 @@ edition = "2024"
 license = "Apache-2.0"
 
 [workspace.dependencies]
-nekoai-agent = { path = "crates/agent" }
-nekoai-cli = { path = "crates/cli" }
-nekoai-config = { path = "crates/config" }
-nekoai-discord = { path = "crates/discord" }
-nekoai-domain = { path = "crates/domain" }
-nekoai-infra = { path = "crates/infra" }
-nekoai-memory = { path = "crates/memory" }
-nekoai-setup = { path = "crates/setup" }
-nekoai-tools = { path = "crates/tools" }
+nekoai-agent = { path = "nekoai-rs/agent" }
+nekoai-cli = { path = "nekoai-rs/cli" }
+nekoai-config = { path = "nekoai-rs/config" }
+nekoai-discord = { path = "nekoai-rs/discord" }
+nekoai-domain = { path = "nekoai-rs/domain" }
+nekoai-infra = { path = "nekoai-rs/infra" }
+nekoai-memory = { path = "nekoai-rs/memory" }
+nekoai-setup = { path = "nekoai-rs/setup" }
+nekoai-tools = { path = "nekoai-rs/tools" }
 
 anyhow = "1.0.102"
 async-trait = "0.1.89"
@@ -48,7 +48,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 thiserror = "2.0.18"
 serenity = { version = "0.12.5", features = ["full"] }
-tokio = { version = "1.52.2", features = ["full"] }
+tokio = { version = "1.52.3", features = ["full"] }
 tokio-retry = "0.3.1"
 tracing = "0.1.44"
 tracing-appender = "0.2.5"

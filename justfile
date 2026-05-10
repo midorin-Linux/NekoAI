@@ -5,10 +5,7 @@ help:
     just -l
 
 neko *args:
-    cargo build --bin nekoai-cli
-    @echo ""
-    ./target/debug/nekoai-cli.exe {{args}}
-    @echo ""
+    cargo run --bin nekoai-cli -- {{args}}
 
 qdrant-setup:
     docker pull qdrant/qdrant:latest
@@ -20,6 +17,5 @@ qdrant-up:
 qdrant-down:
     $running = docker ps --filter "name=^qdrant$" -q; if ($running) { docker stop qdrant }
 
-
 fmt:
-    cargo +nightly  fmt --all
+    cargo +nightly fmt --all
