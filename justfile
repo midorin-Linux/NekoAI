@@ -1,12 +1,8 @@
 # For Windows users. If you are linux or macOS user, please delete this line.
 set shell := ["powershell.exe", "-c"]
-set working-directory := "nekoai-rs"
 
 help:
     just -l
-
-neko *args:
-    cargo run --bin nekoai-cli -- {{args}}
 
 qdrant-setup:
     docker pull qdrant/qdrant:latest
@@ -17,6 +13,3 @@ qdrant-up:
 
 qdrant-down:
     $running = docker ps --filter "name=^qdrant$" -q; if ($running) { docker stop qdrant }
-
-fmt:
-    cargo +nightly fmt --all
