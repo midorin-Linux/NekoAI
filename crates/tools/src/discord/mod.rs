@@ -18,5 +18,23 @@ pub mod schedule;
 pub mod thread;
 pub mod voice;
 
+pub use channel::{
+    ArchiveChannel, CreateChannelTool, ListChannels, SetChannelPermissions, UpdateChannel,
+};
+pub use emoji::{AddEmoji, DeleteEmoji, GetReactionStats, ListEmojis};
 pub use error::DiscordToolError;
-pub use message::{SendDiscordMessage, SendMessageArgs, SendMessageOutput};
+pub use guild::{GetAuditLog, GetGuildInfo, ManageBans, UpdateGuildSettings};
+pub use invite::{CreateInviteTool, ListInvites, RevokeInvite};
+pub use member::{
+    GetMemberActivity, KickMember, SearchMembers, TimeoutMember, UpdateMemberNickname,
+};
+pub use message::{
+    AddReaction, BulkDeleteMessages, PinMessage, SearchMessages, SendMessageTool,
+    SendWebhookMessage,
+};
+pub use role::{AssignRoles, ListRoleMembers, ListRoles, ReorderRoles, UpsertRole};
+pub use schedule::{
+    CreateScheduledEventTool, GetEventSubscribers, ListEvents, UpdateOrCancelEvent,
+};
+pub use thread::{ArchiveOrLockThread, CreateThreadTool, ListThreads, ManageThreadMembers};
+pub use voice::{GetVoiceStates, ManageStageTopic, MoveMemberToVoice, SetVoiceMuteDeafen};

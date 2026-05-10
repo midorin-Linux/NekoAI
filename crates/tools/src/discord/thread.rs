@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use rig::{completion::ToolDefinition, tool::Tool};
 use serde_json::{Value, json};
-use serenity::{all::CreateThread, http::Http};
+use serenity::{
+    all::{CreateThread, EditThread},
+    http::Http,
+};
 
 use crate::discord::{
     error::DiscordToolError,
@@ -238,6 +241,238 @@ impl Tool for AddDiscordThreadMember {
         {
             Ok(()) => Ok(ok(json!({ "added": true }))),
             Err(error) => Ok(err(format!("Failed to add thread member: {error}"))),
+        }
+    }
+}
+
+pub struct CreateThreadTool {
+    inner: CreateDiscordThread,
+}
+
+pub struct ListThreads {
+    inner: GetDiscordThreadList,
+}
+
+pub struct ArchiveOrLockThread {
+    http: Arc<Http>,
+}
+
+pub struct ManageThreadMembers {
+    http: Arc<Http>,
+}
+
+impl CreateThreadTool {
+    pub fn new(http: Arc<Http>) -> Self {
+        Self {
+            inner: CreateDiscordThread::new(http),
+        }
+    }
+}
+
+impl ListThreads {
+    pub fn new(http: Arc<Http>) -> Self {
+        Self {
+            inner: GetDiscordThreadList::new(http),
+        }
+    }
+}
+
+impl ArchiveOrLockThread {
+    pub fn new(http: Arc<Http>) -> Self {
+        Self { http }
+    }
+}
+
+impl ManageThreadMembers {
+    pub fn new(http: Arc<Http>) -> Self {
+        Self { http }
+    }
+}
+
+impl Tool for CreateThreadTool {
+    const NAME: &'static str = "create_thread";
+    type Error = DiscordToolError;
+    type Args = Value;
+    type Output = Value;
+
+    async fn definition(&self, _prompt: String) -> ToolDefinition {
+        ToolDefinition {
+            name: Self::NAME.to_string(),
+            description: "Create a thread from a channel or source message.".to_string(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "channel_id": { "type": "integer" },
+                    "name": { "type": "string" },
+                    "kind": { "type": "string" },
+                    "auto_archive_duration": { "type": "integer" },
+                    "rate_limit_per_user": { "type": "integer" },
+                    "invitable": { "type": "boolean" },
+                    "message_id": { "type": "integer" }
+                },
+                "required": ["channel_id", "name"]
+            }),
+        }
+    }
+
+    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        self.inner.call(args).await
+    }
+}
+
+impl Tool for ListThreads {
+    const NAME: &'static str = "list_threads";
+    type Error = DiscordToolError;
+    type Args = Value;
+    type Output = Value;
+
+    async fn definition(&self, _prompt: String) -> ToolDefinition {
+        ToolDefinition {
+            name: Self::NAME.to_string(),
+            description: "List active threads in a guild.".to_string(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "guild_id": { "type": "integer" }
+                },
+                "required": ["guild_id"]
+            }),
+        }
+    }
+
+    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        self.inner.call(args).await
+    }
+}
+
+impl Tool for ArchiveOrLockThread {
+    const NAME: &'static str = "archive_or_lock_thread";
+    type Error = DiscordToolError;
+    type Args = Value;
+    type Output = Value;
+
+    async fn definition(&self, _prompt: String) -> ToolDefinition {
+        ToolDefinition {
+            name: Self::NAME.to_string(),
+            description: "Archive and/or lock a thread.".to_string(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "thread_id": { "type": "integer" },
+                    "archived": { "type": "boolean" },
+                    "locked": { "type": "boolean" }
+                },
+                "required": ["thread_id"]
+            }),
+        }
+    }
+
+    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        let Some(thread_id) = get_channel_id(&args, "thread_id") else {
+            return Ok(err("thread_id is required"));
+        };
+        if let Err(message) = require_current_user_admin_for_channel(&self.http, thread_id).await {
+            return Ok(err(message));
+        }
+
+        let archived = get_bool(&args, "archived").unwrap_or(true);
+        let locked = get_bool(&args, "locked").unwrap_or(true);
+
+        match retry_discord(|| {
+            let http = self.http.clone();
+            async move {
+                thread_id
+                    .edit_thread(&http, EditThread::new().archived(archived).locked(locked))
+                    .await
+            }
+        })
+        .await
+        {
+            Ok(thread) => Ok(ok(to_value(&thread))),
+            Err(error) => Ok(err(format!("Failed to update thread: {error}"))),
+        }
+    }
+}
+
+impl Tool for ManageThreadMembers {
+    const NAME: &'static str = "manage_thread_members";
+    type Error = DiscordToolError;
+    type Args = Value;
+    type Output = Value;
+
+    async fn definition(&self, _prompt: String) -> ToolDefinition {
+        ToolDefinition {
+            name: Self::NAME.to_string(),
+            description: "Add or remove members from a thread.".to_string(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "thread_id": { "type": "integer" },
+                    "action": { "type": "string", "enum": ["add", "remove", "list"] },
+                    "user_id": { "type": "integer" }
+                },
+                "required": ["thread_id", "action"]
+            }),
+        }
+    }
+
+    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        let Some(thread_id) = get_channel_id(&args, "thread_id") else {
+            return Ok(err("thread_id is required"));
+        };
+        let Some(action) = get_string(&args, "action") else {
+            return Ok(err("action is required"));
+        };
+
+        match action.as_str() {
+            "add" => {
+                if let Err(message) =
+                    require_current_user_admin_for_channel(&self.http, thread_id).await
+                {
+                    return Ok(err(message));
+                }
+                let Some(user_id) = get_user_id(&args, "user_id") else {
+                    return Ok(err("user_id is required for add"));
+                };
+                match retry_discord(|| {
+                    let http = self.http.clone();
+                    async move { thread_id.add_thread_member(&http, user_id).await }
+                })
+                .await
+                {
+                    Ok(()) => Ok(ok(json!({ "action": "add", "ok": true }))),
+                    Err(error) => Ok(err(format!("Failed to add member: {error}"))),
+                }
+            }
+            "remove" => {
+                if let Err(message) =
+                    require_current_user_admin_for_channel(&self.http, thread_id).await
+                {
+                    return Ok(err(message));
+                }
+                let Some(user_id) = get_user_id(&args, "user_id") else {
+                    return Ok(err("user_id is required for remove"));
+                };
+                match retry_discord(|| {
+                    let http = self.http.clone();
+                    async move { thread_id.remove_thread_member(&http, user_id).await }
+                })
+                .await
+                {
+                    Ok(()) => Ok(ok(json!({ "action": "remove", "ok": true }))),
+                    Err(error) => Ok(err(format!("Failed to remove member: {error}"))),
+                }
+            }
+            "list" => match retry_discord(|| {
+                let http = self.http.clone();
+                async move { http.get_channel_thread_members(thread_id).await }
+            })
+            .await
+            {
+                Ok(members) => Ok(ok(to_value(&members))),
+                Err(error) => Ok(err(format!("Failed to list thread members: {error}"))),
+            },
+            _ => Ok(err("action must be add, remove, or list")),
         }
     }
 }
