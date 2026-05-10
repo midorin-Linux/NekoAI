@@ -5,36 +5,20 @@ use indicatif::{ProgressBar, ProgressStyle};
 use nekoai_agent::runtime::AgentRuntime;
 use nekoai_tools::discord::{
     channel::{
-        CreateDiscordChannel, DeleteDiscordChannel, GetDiscordChannelInfo, GetDiscordChannelList,
-        ModifyDiscordChannel,
+        ArchiveChannel, CreateChannelTool, ListChannels, SetChannelPermissions, UpdateChannel,
     },
-    emoji::{CreateDiscordEmoji, DeleteDiscordEmoji, GetDiscordEmojiList, GetDiscordStickerList},
-    guild::{GetDiscordAuditLog, GetDiscordGuildInfo, GetDiscordGuildList, ModifyDiscordGuild},
-    invite::{CreateDiscordInvite, DeleteDiscordInvite, GetDiscordInviteList},
-    member::{
-        BanDiscordMember, BulkBanDiscordMembers, GetDiscordMemberInfo, GetDiscordMemberList,
-        KickDiscordMember, ModifyDiscordMember, TimeoutDiscordMember, UnbanDiscordMember,
-    },
+    emoji::{AddEmoji, DeleteEmoji, GetReactionStats, ListEmojis},
+    guild::{GetAuditLog, GetGuildInfo, ManageBans, UpdateGuildSettings},
+    invite::{CreateInviteTool, ListInvites, RevokeInvite},
+    member::{GetMemberActivity, KickMember, SearchMembers, TimeoutMember, UpdateMemberNickname},
     message::{
-        AddDiscordReaction, BulkDeleteDiscordMessages, DeleteDiscordMessage, EditDiscordMessage,
-        GetDiscordMessage, GetDiscordMessageHistory, PinDiscordMessage, RemoveDiscordReaction,
-        SendDiscordMessage, UnpinDiscordMessage,
+        AddReaction, BulkDeleteMessages, PinMessage, SearchMessages, SendMessageTool,
+        SendWebhookMessage,
     },
-    role::{
-        AddDiscordRoleToMember, CreateDiscordRole, DeleteDiscordRole, GetDiscordRoleList,
-        ModifyDiscordRole, RemoveDiscordRoleFromMember,
-    },
-    schedule::{
-        CreateDiscordScheduledEvent, DeleteDiscordScheduledEvent, GetDiscordScheduledEvents,
-        ModifyDiscordScheduledEvent,
-    },
-    thread::{
-        AddDiscordThreadMember, CreateDiscordThread, DeleteDiscordThread, GetDiscordThreadList,
-    },
-    voice::{
-        DeafenDiscordMember, DisconnectDiscordMemberVoice, MoveDiscordMemberVoice,
-        MuteDiscordMember,
-    },
+    role::{AssignRoles, ListRoleMembers, ListRoles, ReorderRoles, UpsertRole},
+    schedule::{CreateScheduledEventTool, GetEventSubscribers, ListEvents, UpdateOrCancelEvent},
+    thread::{ArchiveOrLockThread, CreateThreadTool, ListThreads, ManageThreadMembers},
+    voice::{GetVoiceStates, ManageStageTopic, MoveMemberToVoice, SetVoiceMuteDeafen},
 };
 use serenity::{http::Http, prelude::*};
 use tracing::info;
@@ -86,85 +70,50 @@ impl DiscordClient {
         }
 
         register_tools!(
-            SendDiscordMessage::new(http.clone()),
-            EditDiscordMessage::new(http.clone()),
-            DeleteDiscordMessage::new(http.clone()),
-            GetDiscordMessage::new(http.clone()),
-            BulkDeleteDiscordMessages::new(http.clone()),
-            GetDiscordMessageHistory::new(http.clone()),
-            PinDiscordMessage::new(http.clone()),
-            UnpinDiscordMessage::new(http.clone()),
-            AddDiscordReaction::new(http.clone()),
-            RemoveDiscordReaction::new(http.clone()),
-        );
-
-        register_tools!(
-            CreateDiscordChannel::new(http.clone()),
-            DeleteDiscordChannel::new(http.clone()),
-            ModifyDiscordChannel::new(http.clone()),
-            GetDiscordChannelInfo::new(http.clone()),
-            GetDiscordChannelList::new(http.clone()),
-        );
-
-        register_tools!(
-            GetDiscordGuildInfo::new(http.clone()),
-            GetDiscordGuildList::new(http.clone()),
-            ModifyDiscordGuild::new(http.clone()),
-            GetDiscordAuditLog::new(http.clone()),
-        );
-
-        register_tools!(
-            GetDiscordRoleList::new(http.clone()),
-            CreateDiscordRole::new(http.clone()),
-            DeleteDiscordRole::new(http.clone()),
-            ModifyDiscordRole::new(http.clone()),
-            AddDiscordRoleToMember::new(http.clone()),
-            RemoveDiscordRoleFromMember::new(http.clone()),
-        );
-
-        register_tools!(
-            GetDiscordMemberList::new(http.clone()),
-            GetDiscordMemberInfo::new(http.clone()),
-            KickDiscordMember::new(http.clone()),
-            BanDiscordMember::new(http.clone()),
-            UnbanDiscordMember::new(http.clone()),
-            BulkBanDiscordMembers::new(http.clone()),
-            ModifyDiscordMember::new(http.clone()),
-            TimeoutDiscordMember::new(http.clone()),
-        );
-
-        register_tools!(
-            CreateDiscordThread::new(http.clone()),
-            DeleteDiscordThread::new(http.clone()),
-            GetDiscordThreadList::new(http.clone()),
-            AddDiscordThreadMember::new(http.clone()),
-        );
-
-        register_tools!(
-            MoveDiscordMemberVoice::new(http.clone()),
-            DisconnectDiscordMemberVoice::new(http.clone()),
-            MuteDiscordMember::new(http.clone()),
-            DeafenDiscordMember::new(http.clone()),
-        );
-
-        register_tools!(
-            GetDiscordInviteList::new(http.clone()),
-            CreateDiscordInvite::new(http.clone()),
-            DeleteDiscordInvite::new(http.clone()),
-        );
-
-        register_tools!(
-            GetDiscordEmojiList::new(http.clone()),
-            CreateDiscordEmoji::new(http.clone()),
-            DeleteDiscordEmoji::new(http.clone()),
-            GetDiscordStickerList::new(http.clone()),
-        );
-
-        register_tools!(
-            GetDiscordScheduledEvents::new(http.clone()),
-            CreateDiscordScheduledEvent::new(http.clone()),
-            ModifyDiscordScheduledEvent::new(http.clone()),
-            DeleteDiscordScheduledEvent::new(http.clone()),
+            ListChannels::new(http.clone()),
+            CreateChannelTool::new(http.clone()),
+            UpdateChannel::new(http.clone()),
+            ArchiveChannel::new(http.clone()),
+            SetChannelPermissions::new(http.clone()),
+            ListEmojis::new(http.clone()),
+            AddEmoji::new(http.clone()),
+            DeleteEmoji::new(http.clone()),
+            GetReactionStats::new(http.clone()),
+            GetGuildInfo::new(http.clone()),
+            UpdateGuildSettings::new(http.clone()),
+            GetAuditLog::new(http.clone()),
+            ManageBans::new(http.clone()),
+            CreateInviteTool::new(http.clone()),
+            ListInvites::new(http.clone()),
+            RevokeInvite::new(http.clone()),
+            SearchMembers::new(http.clone()),
+            UpdateMemberNickname::new(http.clone()),
+            TimeoutMember::new(http.clone()),
+            KickMember::new(http.clone()),
+            GetMemberActivity::new(http.clone()),
+            SendMessageTool::new(http.clone()),
+            SearchMessages::new(http.clone()),
+            BulkDeleteMessages::new(http.clone()),
+            PinMessage::new(http.clone()),
+            AddReaction::new(http.clone()),
+            SendWebhookMessage::new(http.clone()),
+            ListRoles::new(http.clone()),
+            UpsertRole::new(http.clone()),
+            AssignRoles::new(http.clone()),
+            ReorderRoles::new(http.clone()),
+            ListRoleMembers::new(http.clone()),
+            CreateScheduledEventTool::new(http.clone()),
+            ListEvents::new(http.clone()),
+            UpdateOrCancelEvent::new(http.clone()),
+            GetEventSubscribers::new(http.clone()),
+            CreateThreadTool::new(http.clone()),
+            ListThreads::new(http.clone()),
+            ArchiveOrLockThread::new(http.clone()),
+            ManageThreadMembers::new(http.clone()),
+            GetVoiceStates::new(http.clone()),
+            MoveMemberToVoice::new(http.clone()),
+            SetVoiceMuteDeafen::new(http.clone()),
+            ManageStageTopic::new(http.clone()),
         );
 
         info!("discord client created");

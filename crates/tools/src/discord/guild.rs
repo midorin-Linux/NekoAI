@@ -32,7 +32,7 @@ pub struct GetDiscordAuditLog {
 }
 
 pub struct GetGuildSummary {
-    http: Arc<Http>,
+    _http: Arc<Http>,
 }
 
 impl GetDiscordGuildInfo {
@@ -54,12 +54,6 @@ impl ModifyDiscordGuild {
 }
 
 impl GetDiscordAuditLog {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl GetGuildSummary {
     pub fn new(http: Arc<Http>) -> Self {
         Self { http }
     }
@@ -272,9 +266,54 @@ impl Tool for GetDiscordAuditLog {
     }
 }
 
-impl Tool for GetGuildSummary {
-    const NAME: &'static str = "get_guild_summary";
+pub struct GetGuildInfo {
+    inner: GetDiscordGuildInfo,
+}
 
+pub struct UpdateGuildSettings {
+    inner: ModifyDiscordGuild,
+}
+
+pub struct GetAuditLog {
+    inner: GetDiscordAuditLog,
+}
+
+pub struct ManageBans {
+    http: Arc<Http>,
+}
+
+impl GetGuildInfo {
+    pub fn new(http: Arc<Http>) -> Self {
+        Self {
+            inner: GetDiscordGuildInfo::new(http),
+        }
+    }
+}
+
+impl UpdateGuildSettings {
+    pub fn new(http: Arc<Http>) -> Self {
+        Self {
+            inner: ModifyDiscordGuild::new(http),
+        }
+    }
+}
+
+impl GetAuditLog {
+    pub fn new(http: Arc<Http>) -> Self {
+        Self {
+            inner: GetDiscordAuditLog::new(http),
+        }
+    }
+}
+
+impl ManageBans {
+    pub fn new(http: Arc<Http>) -> Self {
+        Self { http }
+    }
+}
+
+impl Tool for GetGuildInfo {
+    const NAME: &'static str = "get_guild_info";
     type Error = DiscordToolError;
     type Args = Value;
     type Output = Value;
@@ -282,13 +321,98 @@ impl Tool for GetGuildSummary {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Get a high-level summary of the guild, including counts of channels, roles, and members.".to_string(),
+            description: "Get guild metadata, features, and high-level statistics.".to_string(),
+            parameters: json!({
+                "type": "object",
+                "properties": { "guild_id": { "type": "integer" } },
+                "required": ["guild_id"]
+            }),
+        }
+    }
+
+    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        self.inner.call(args).await
+    }
+}
+
+impl Tool for UpdateGuildSettings {
+    const NAME: &'static str = "update_guild_settings";
+    type Error = DiscordToolError;
+    type Args = Value;
+    type Output = Value;
+
+    async fn definition(&self, _prompt: String) -> ToolDefinition {
+        ToolDefinition {
+            name: Self::NAME.to_string(),
+            description: "Update guild settings including icon and description.".to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
-                    "guild_id": { "type": "integer", "description": "Guild id." }
+                    "guild_id": { "type": "integer" },
+                    "name": { "type": "string" },
+                    "description": { "type": "string" },
+                    "icon_path": { "type": "string" },
+                    "clear_icon": { "type": "boolean" }
                 },
                 "required": ["guild_id"]
+            }),
+        }
+    }
+
+    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        self.inner.call(args).await
+    }
+}
+
+impl Tool for GetAuditLog {
+    const NAME: &'static str = "get_audit_log";
+    type Error = DiscordToolError;
+    type Args = Value;
+    type Output = Value;
+
+    async fn definition(&self, _prompt: String) -> ToolDefinition {
+        ToolDefinition {
+            name: Self::NAME.to_string(),
+            description: "Fetch filtered audit log entries for a guild.".to_string(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "guild_id": { "type": "integer" },
+                    "action_type": { "type": "integer" },
+                    "user_id": { "type": "integer" },
+                    "before": { "type": "integer" },
+                    "limit": { "type": "integer" }
+                },
+                "required": ["guild_id"]
+            }),
+        }
+    }
+
+    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        self.inner.call(args).await
+    }
+}
+
+impl Tool for ManageBans {
+    const NAME: &'static str = "manage_bans";
+    type Error = DiscordToolError;
+    type Args = Value;
+    type Output = Value;
+
+    async fn definition(&self, _prompt: String) -> ToolDefinition {
+        ToolDefinition {
+            name: Self::NAME.to_string(),
+            description: "List, add, or remove guild bans in one tool.".to_string(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "guild_id": { "type": "integer" },
+                    "action": { "type": "string", "enum": ["list", "add", "remove"] },
+                    "user_id": { "type": "integer" },
+                    "delete_message_days": { "type": "integer" },
+                    "reason": { "type": "string" }
+                },
+                "required": ["guild_id", "action"]
             }),
         }
     }
@@ -297,61 +421,66 @@ impl Tool for GetGuildSummary {
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
+        let Some(action) = get_string(&args, "action") else {
+            return Ok(err("action is required"));
+        };
 
-        let http = self.http.clone();
-        match retry_discord(|| {
-            let http = http.clone();
-            async move { guild_id.to_partial_guild(&http).await }
-        })
-        .await
-        {
-            Ok(guild) => {
-                let http = self.http.clone();
-                let channels = retry_discord(|| {
-                    let http = http.clone();
-                    async move { guild_id.channels(&http).await }
+        match action.as_str() {
+            "list" => {
+                let bans = match retry_discord(|| {
+                    let http = self.http.clone();
+                    async move { guild_id.bans(&http, None, None).await }
                 })
                 .await
-                .unwrap_or_else(|_| Default::default());
-
-                let text_channels = channels
-                    .values()
-                    .filter(|c| c.kind == serenity::all::ChannelType::Text)
-                    .count();
-                let voice_channels = channels
-                    .values()
-                    .filter(|c| c.kind == serenity::all::ChannelType::Voice)
-                    .count();
-                let categories = channels
-                    .values()
-                    .filter(|c| c.kind == serenity::all::ChannelType::Category)
-                    .count();
-
-                let summary = json!({
-                    "id": guild.id.get(),
-                    "name": guild.name,
-                    "description": guild.description,
-                    "member_count": guild.approximate_member_count,
-                    "presence_count": guild.approximate_presence_count,
-                    "owner_id": guild.owner_id.get(),
-                    "verification_level": guild.verification_level,
-                    "explicit_content_filter": guild.explicit_content_filter,
-                    "roles_count": guild.roles.len(),
-                    "emojis_count": guild.emojis.len(),
-                    "stickers_count": guild.stickers.len(),
-                    "channels_summary": {
-                        "total": channels.len(),
-                        "text": text_channels,
-                        "voice": voice_channels,
-                        "category": categories,
-                    }
-                });
-
-                Ok(ok(summary))
+                {
+                    Ok(bans) => bans,
+                    Err(error) => return Ok(err(format!("Failed to fetch bans: {error}"))),
+                };
+                Ok(ok(to_value(&bans)))
             }
-            Err(error) => Ok(err(format!(
-                "Failed to fetch guild info for summary: {error}"
-            ))),
+            "add" => {
+                crate::admin_guard_guild!(&self.http, guild_id);
+                let Some(user_id) = get_user_id(&args, "user_id") else {
+                    return Ok(err("user_id is required for add"));
+                };
+                let delete_message_days = get_u8(&args, "delete_message_days").unwrap_or(0);
+                let reason = get_string(&args, "reason").unwrap_or_default();
+
+                match retry_discord(|| {
+                    let http = self.http.clone();
+                    let reason = reason.clone();
+                    async move {
+                        guild_id
+                            .ban_with_reason(&http, user_id, delete_message_days, reason.as_str())
+                            .await
+                    }
+                })
+                .await
+                {
+                    Ok(()) => Ok(ok(
+                        json!({ "action": "add", "banned": true, "user_id": user_id.get() }),
+                    )),
+                    Err(error) => Ok(err(format!("Failed to ban user: {error}"))),
+                }
+            }
+            "remove" => {
+                crate::admin_guard_guild!(&self.http, guild_id);
+                let Some(user_id) = get_user_id(&args, "user_id") else {
+                    return Ok(err("user_id is required for remove"));
+                };
+                match retry_discord(|| {
+                    let http = self.http.clone();
+                    async move { guild_id.unban(&http, user_id).await }
+                })
+                .await
+                {
+                    Ok(()) => Ok(ok(
+                        json!({ "action": "remove", "unbanned": true, "user_id": user_id.get() }),
+                    )),
+                    Err(error) => Ok(err(format!("Failed to unban user: {error}"))),
+                }
+            }
+            _ => Ok(err("action must be one of: list, add, remove")),
         }
     }
 }

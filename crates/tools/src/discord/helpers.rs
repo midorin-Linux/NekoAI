@@ -1,11 +1,14 @@
 use std::{str::FromStr, time::Duration};
 
-use chrono::Utc;
+use chrono::{DateTime, TimeZone, Utc};
 use serde::Serialize;
 use serde_json::{Value, json};
-use serenity::all::{
-    AutoArchiveDuration, ChannelId, ChannelType, Colour, GuildId, MessageId, ReactionType,
-    ScheduledEventStatus, ScheduledEventType, Timestamp, UserId,
+use serenity::{
+    all::{
+        AutoArchiveDuration, ChannelId, ChannelType, Colour, GuildId, Member, MessageId,
+        ReactionType, Role, RoleId, ScheduledEventStatus, ScheduledEventType, Timestamp, UserId,
+    },
+    http::Http,
 };
 use tokio_retry::{
     Retry,
@@ -265,4 +268,97 @@ pub fn resolve_relative_timestamp(duration_str: &str) -> Option<Timestamp> {
     let duration = parse_relative_time(duration_str)?;
     let future_time = Utc::now() + duration;
     Timestamp::parse(&future_time.to_rfc3339()).ok()
+}
+
+pub fn snowflake_to_datetime(snowflake: u64) -> DateTime<Utc> {
+    let unix_ms = ((snowflake >> 22) + 1_420_070_400_000) as i64;
+    Utc.timestamp_millis_opt(unix_ms)
+        .single()
+        .unwrap_or_else(Utc::now)
+}
+
+pub async fn fetch_guild_members(
+    http: &Http,
+    guild_id: GuildId,
+    limit: u64,
+) -> serenity::Result<Vec<Member>> {
+    let mut all_members = Vec::new();
+    let mut after = None;
+
+    while (all_members.len() as u64) < limit {
+        let batch_limit = (limit - all_members.len() as u64).min(1000);
+        let mut members = guild_id.members(http, Some(batch_limit), after).await?;
+        if members.is_empty() {
+            break;
+        }
+
+        let fetched_count = members.len();
+        after = members.last().map(|member| member.user.id);
+        all_members.append(&mut members);
+
+        if fetched_count < batch_limit as usize {
+            break;
+        }
+    }
+
+    Ok(all_members)
+}
+
+pub async fn resolve_user_id(http: &Http, guild_id: GuildId, query: &str) -> Option<UserId> {
+    let cleaned = query
+        .trim()
+        .trim_start_matches("<@")
+        .trim_start_matches('!')
+        .trim_end_matches('>');
+    if let Some(id) = parse_u64(&Value::String(cleaned.to_string())) {
+        return Some(UserId::new(id));
+    }
+
+    let members = fetch_guild_members(http, guild_id, 5_000).await.ok()?;
+    let query_lower = query.trim().to_lowercase();
+    let mut matches = members
+        .into_iter()
+        .filter(|member| {
+            member.user.name.to_lowercase().contains(&query_lower)
+                || member
+                    .nick
+                    .as_ref()
+                    .is_some_and(|nick| nick.to_lowercase().contains(&query_lower))
+                || member
+                    .user
+                    .global_name
+                    .as_ref()
+                    .is_some_and(|global| global.to_lowercase().contains(&query_lower))
+        })
+        .collect::<Vec<_>>();
+
+    matches.sort_by(|left, right| left.user.name.cmp(&right.user.name));
+    matches.first().map(|member| member.user.id)
+}
+
+pub async fn resolve_role_id(http: &Http, guild_id: GuildId, query: &str) -> Option<RoleId> {
+    let cleaned = query.trim().trim_start_matches("<@&").trim_end_matches('>');
+    if let Some(id) = parse_u64(&Value::String(cleaned.to_string())) {
+        return Some(RoleId::new(id));
+    }
+
+    let roles = guild_id.roles(http).await.ok()?;
+    let query_lower = query.trim().to_lowercase();
+    let mut matches = roles
+        .values()
+        .filter(|role: &&Role| role.name.to_lowercase().contains(&query_lower))
+        .collect::<Vec<_>>();
+
+    matches.sort_by(|left, right| left.name.cmp(&right.name));
+    matches.first().map(|role| role.id)
+}
+
+pub async fn resolve_role_ids(http: &Http, guild_id: GuildId, queries: &[String]) -> Vec<RoleId> {
+    let mut ids = Vec::new();
+    for query in queries {
+        if let Some(id) = resolve_role_id(http, guild_id, query).await {
+            ids.push(id);
+        }
+    }
+    ids
 }
