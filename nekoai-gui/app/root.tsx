@@ -2,13 +2,13 @@ import {
   isRouteErrorResponse,
   Links,
   Meta,
-  Outlet,
   Scripts,
   ScrollRestoration,
 } from "react-router";
 
 import type { Route } from "./+types/root";
 import "./app.css";
+import { Theme } from "@radix-ui/themes";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -33,16 +33,36 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        {children}
-        <ScrollRestoration />
-        <Scripts />
+        <Theme>
+          <div className="flex flex-col w-screen min-h-screen">
+            <header className="fixed h-11 bg-white flex flex-row justify-between px-4 py-1 w-full z-50">
+              <div>
+                <div className="flex flex-row gap-1 items-baseline">
+                  <h1 className="text-3xl text-gray-900">NekoAI</h1>
+                  <h2 className="text-sm text-gray-600">for GUI</h2>
+                </div>
+              </div>
+              <div></div>
+            </header>
+            <main className="mt-11 grow">
+              {children}
+            </main>
+            {/*<footer className="bg-blue-800 w-full">*/}
+            {/*   <p className="text-xs text-center text-white py-1">© 2026 midorin-Linux. All rights reserved.</p>*/}
+            {/*</footer>*/}
+          </div>
+          <ScrollRestoration />
+          <Scripts />
+        </Theme>
       </body>
     </html>
   );
 }
 
 export default function App() {
-  return <Outlet />;
+  return (
+      <h1>Hello, world!</h1>
+  );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
