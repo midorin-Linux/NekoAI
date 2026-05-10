@@ -1,5 +1,6 @@
 # For Windows users. If you are linux or macOS user, please delete this line.
 set shell := ["powershell.exe", "-c"]
+set working-directory := "nekoai-rs"
 
 help:
     just -l

@@ -1,14 +1,14 @@
 [workspace]
 members = [
-    "nekoai-rs/agent",
-    "nekoai-rs/cli",
-    "nekoai-rs/config",
-    "nekoai-rs/discord",
-    "nekoai-rs/domain",
-    "nekoai-rs/infra",
-    "nekoai-rs/memory",
-    "nekoai-rs/setup",
-    "nekoai-rs/tools"
+    "agent",
+    "cli",
+    "config",
+    "discord",
+    "domain",
+    "infra",
+    "memory",
+    "setup",
+    "tools"
 ]
 resolver = "2"
 
@@ -18,15 +18,15 @@ edition = "2024"
 license = "Apache-2.0"
 
 [workspace.dependencies]
-nekoai-agent = { path = "nekoai-rs/agent" }
-nekoai-cli = { path = "nekoai-rs/cli" }
-nekoai-config = { path = "nekoai-rs/config" }
-nekoai-discord = { path = "nekoai-rs/discord" }
-nekoai-domain = { path = "nekoai-rs/domain" }
-nekoai-infra = { path = "nekoai-rs/infra" }
-nekoai-memory = { path = "nekoai-rs/memory" }
-nekoai-setup = { path = "nekoai-rs/setup" }
-nekoai-tools = { path = "nekoai-rs/tools" }
+nekoai-agent = { path = "agent" }
+nekoai-cli = { path = "cli" }
+nekoai-config = { path = "config" }
+nekoai-discord = { path = "discord" }
+nekoai-domain = { path = "domain" }
+nekoai-infra = { path = "infra" }
+nekoai-memory = { path = "memory" }
+nekoai-setup = { path = "setup" }
+nekoai-tools = { path = "tools" }
 
 anyhow = "1.0.102"
 async-trait = "0.1.89"

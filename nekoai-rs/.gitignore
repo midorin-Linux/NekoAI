@@ -1,0 +1,5 @@
+target
+logs
+.config/config.json
+**/*.rs.bk
+*.pdb

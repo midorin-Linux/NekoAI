@@ -1,16 +1,2 @@
-# root
 .idea/
-.config/config.json
-logs/
 .env
-
-# nekoai-gui
-nekoai-gui/.DS_Store
-nekoai-gui/node_modules/
-nekoai-gui/.react-router/
-nekoai-gui/build/
-
-# nekoai-rs
-/target
-**/*.rs.bk
-*.pdb
