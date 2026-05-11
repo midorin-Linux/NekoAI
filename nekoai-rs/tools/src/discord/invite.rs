@@ -3,13 +3,17 @@ use std::sync::Arc;
 use rig::{completion::ToolDefinition, tool::Tool};
 use serde_json::{Value, json};
 use serenity::{all::CreateInvite, http::Http};
+use tracing;
 
-use crate::discord::{
-    error::DiscordToolError,
-    helpers::{
-        err, get_bool, get_channel_id, get_guild_id_default, get_string, get_u8, get_u32, ok,
-        retry_discord, to_value,
+use crate::{
+    discord::{
+        error::DiscordToolError,
+        helpers::{
+            err, get_bool, get_channel_id, get_guild_id_default, get_string, get_u8, get_u32, ok,
+            retry_discord, to_value,
+        },
     },
+    impl_new,
 };
 
 pub struct ListInvites {
@@ -22,24 +26,6 @@ pub struct CreateInviteTool {
 
 pub struct RevokeInvite {
     http: Arc<Http>,
-}
-
-impl ListInvites {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl CreateInviteTool {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl RevokeInvite {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
 }
 
 impl Tool for ListInvites {
@@ -61,6 +47,7 @@ impl Tool for ListInvites {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -102,6 +89,7 @@ impl Tool for CreateInviteTool {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(channel_id) = get_channel_id(&args, "channel_id") else {
             return Ok(err("channel_id is required"));
         };
@@ -154,6 +142,7 @@ impl Tool for RevokeInvite {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(code) = get_string(&args, "code") else {
             return Ok(err("code is required"));
         };
@@ -172,3 +161,5 @@ impl Tool for RevokeInvite {
         }
     }
 }
+
+impl_new!(ListInvites, CreateInviteTool, RevokeInvite);

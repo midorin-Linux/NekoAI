@@ -6,14 +6,19 @@ use serenity::{
     all::{CreateThread, EditThread},
     http::Http,
 };
+use tracing;
 
-use crate::discord::{
-    error::DiscordToolError,
-    helpers::{
-        err, get_bool, get_channel_id, get_guild_id_default, get_message_id, get_string, get_u16,
-        get_user_id, ok, parse_auto_archive_duration, parse_thread_type, retry_discord, to_value,
+use crate::{
+    discord::{
+        error::DiscordToolError,
+        helpers::{
+            err, get_bool, get_channel_id, get_guild_id_default, get_message_id, get_string,
+            get_u16, get_user_id, ok, parse_auto_archive_duration, parse_thread_type,
+            retry_discord, to_value,
+        },
+        permission::require_current_user_admin_for_channel,
     },
-    permission::require_current_user_admin_for_channel,
+    impl_new,
 };
 
 pub struct CreateThreadTool {
@@ -30,30 +35,6 @@ pub struct ArchiveOrLockThread {
 
 pub struct ManageThreadMembers {
     http: Arc<Http>,
-}
-
-impl CreateThreadTool {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl ListThreads {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl ArchiveOrLockThread {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl ManageThreadMembers {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
 }
 
 impl Tool for CreateThreadTool {
@@ -83,6 +64,7 @@ impl Tool for CreateThreadTool {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(channel_id) = get_channel_id(&args, "channel_id") else {
             return Ok(err("channel_id is required"));
         };
@@ -153,6 +135,7 @@ impl Tool for ListThreads {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -192,6 +175,7 @@ impl Tool for ArchiveOrLockThread {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(thread_id) = get_channel_id(&args, "thread_id") else {
             return Ok(err("thread_id is required"));
         };
@@ -241,6 +225,7 @@ impl Tool for ManageThreadMembers {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(thread_id) = get_channel_id(&args, "thread_id") else {
             return Ok(err("thread_id is required"));
         };
@@ -300,3 +285,10 @@ impl Tool for ManageThreadMembers {
         }
     }
 }
+
+impl_new!(
+    CreateThreadTool,
+    ListThreads,
+    ArchiveOrLockThread,
+    ManageThreadMembers
+);

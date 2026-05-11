@@ -3,13 +3,17 @@ use std::sync::Arc;
 use rig::{completion::ToolDefinition, tool::Tool};
 use serde_json::{Value, json};
 use serenity::{all::EmojiId, http::Http};
+use tracing;
 
-use crate::discord::{
-    error::DiscordToolError,
-    helpers::{
-        err, get_channel_id, get_guild_id_default, get_message_id, get_string, get_u64, ok,
-        retry_discord, to_value,
+use crate::{
+    discord::{
+        error::DiscordToolError,
+        helpers::{
+            err, get_channel_id, get_guild_id_default, get_message_id, get_string, get_u64, ok,
+            retry_discord, to_value,
+        },
     },
+    impl_new,
 };
 
 pub struct ListEmojis {
@@ -26,30 +30,6 @@ pub struct DeleteEmoji {
 
 pub struct GetReactionStats {
     http: Arc<Http>,
-}
-
-impl ListEmojis {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl AddEmoji {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl DeleteEmoji {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl GetReactionStats {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
 }
 
 impl Tool for ListEmojis {
@@ -71,6 +51,7 @@ impl Tool for ListEmojis {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -110,6 +91,7 @@ impl Tool for AddEmoji {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -164,6 +146,7 @@ impl Tool for DeleteEmoji {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -207,6 +190,7 @@ impl Tool for GetReactionStats {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(channel_id) = get_channel_id(&args, "channel_id") else {
             return Ok(err("channel_id is required"));
         };
@@ -244,3 +228,5 @@ impl Tool for GetReactionStats {
         })))
     }
 }
+
+impl_new!(ListEmojis, AddEmoji, DeleteEmoji, GetReactionStats);

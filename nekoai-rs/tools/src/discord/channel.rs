@@ -6,13 +6,17 @@ use serenity::{
     all::{CreateChannel, EditChannel, PermissionOverwrite, PermissionOverwriteType, Permissions},
     http::Http,
 };
+use tracing;
 
-use crate::discord::{
-    error::DiscordToolError,
-    helpers::{
-        err, get_bool, get_channel_id, get_guild_id_default, get_string, get_u16, get_u32, get_u64,
-        ok, parse_channel_type, retry_discord, to_value,
+use crate::{
+    discord::{
+        error::DiscordToolError,
+        helpers::{
+            err, get_bool, get_channel_id, get_guild_id_default, get_string, get_u16, get_u32,
+            get_u64, ok, parse_channel_type, retry_discord, to_value,
+        },
     },
+    impl_new,
 };
 
 pub struct ListChannels {
@@ -33,36 +37,6 @@ pub struct ArchiveChannel {
 
 pub struct SetChannelPermissions {
     http: Arc<Http>,
-}
-
-impl ListChannels {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl CreateChannelTool {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl UpdateChannel {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl ArchiveChannel {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl SetChannelPermissions {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
 }
 
 impl Tool for ListChannels {
@@ -87,6 +61,7 @@ impl Tool for ListChannels {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -138,6 +113,7 @@ impl Tool for CreateChannelTool {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -218,6 +194,7 @@ impl Tool for UpdateChannel {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(channel_id) = get_channel_id(&args, "channel_id") else {
             return Ok(err("channel_id is required"));
         };
@@ -304,6 +281,7 @@ impl Tool for ArchiveChannel {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(channel_id) = get_channel_id(&args, "channel_id") else {
             return Ok(err("channel_id is required"));
         };
@@ -368,6 +346,7 @@ impl Tool for SetChannelPermissions {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(channel_id) = get_channel_id(&args, "channel_id") else {
             return Ok(err("channel_id is required"));
         };
@@ -418,3 +397,11 @@ impl Tool for SetChannelPermissions {
         }
     }
 }
+
+impl_new!(
+    ListChannels,
+    CreateChannelTool,
+    UpdateChannel,
+    ArchiveChannel,
+    SetChannelPermissions,
+);

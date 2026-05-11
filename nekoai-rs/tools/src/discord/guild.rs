@@ -6,13 +6,17 @@ use serenity::{
     all::{AuditLogEntryId, CreateAttachment, EditGuild, audit_log::Action},
     http::Http,
 };
+use tracing;
 
-use crate::discord::{
-    error::DiscordToolError,
-    helpers::{
-        err, get_bool, get_guild_id_default, get_string, get_u8, get_u32, get_u64, get_user_id, ok,
-        retry_discord, to_value,
+use crate::{
+    discord::{
+        error::DiscordToolError,
+        helpers::{
+            err, get_bool, get_guild_id_default, get_string, get_u8, get_u32, get_u64, get_user_id,
+            ok, retry_discord, to_value,
+        },
     },
+    impl_new,
 };
 
 // --- High-level wrapper structs (keep, with inlined Tool impls) ---
@@ -31,30 +35,6 @@ pub struct GetAuditLog {
 
 pub struct ManageBans {
     http: Arc<Http>,
-}
-
-impl GetGuildInfo {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl UpdateGuildSettings {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl GetAuditLog {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl ManageBans {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
 }
 
 impl Tool for GetGuildInfo {
@@ -77,6 +57,7 @@ impl Tool for GetGuildInfo {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -120,6 +101,7 @@ impl Tool for UpdateGuildSettings {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -194,6 +176,7 @@ impl Tool for GetAuditLog {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -245,6 +228,7 @@ impl Tool for ManageBans {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -311,3 +295,5 @@ impl Tool for ManageBans {
         }
     }
 }
+
+impl_new!(GetGuildInfo, UpdateGuildSettings, GetAuditLog, ManageBans);

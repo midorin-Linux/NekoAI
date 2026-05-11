@@ -13,14 +13,18 @@ use serenity::{
     },
     http::{Http, UserPagination},
 };
+use tracing;
 
-use crate::discord::{
-    error::DiscordToolError,
-    helpers::{
-        err, get_bool, get_channel_id, get_guild_id_default, get_string, get_u64, ok,
-        parse_relative_time, parse_scheduled_event_status, parse_scheduled_event_type,
-        retry_discord, to_value,
+use crate::{
+    discord::{
+        error::DiscordToolError,
+        helpers::{
+            err, get_bool, get_channel_id, get_guild_id_default, get_string, get_u64, ok,
+            parse_relative_time, parse_scheduled_event_status, parse_scheduled_event_type,
+            retry_discord, to_value,
+        },
     },
+    impl_new,
 };
 
 const DEFAULT_EXTERNAL_EVENT_DURATION_MINUTES: i64 = 60;
@@ -55,30 +59,6 @@ pub struct UpdateOrCancelEvent {
 
 pub struct GetEventSubscribers {
     http: Arc<Http>,
-}
-
-impl CreateScheduledEventTool {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl ListEvents {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl UpdateOrCancelEvent {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl GetEventSubscribers {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
 }
 
 fn normalize_text(value: &str) -> String {
@@ -903,6 +883,7 @@ impl Tool for CreateScheduledEventTool {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -1081,6 +1062,7 @@ impl Tool for ListEvents {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -1160,6 +1142,7 @@ impl Tool for UpdateOrCancelEvent {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let action = get_string(&args, "action").unwrap_or_else(|| "update".to_string());
         if action == "cancel" {
             // --- Cancel branch (inlined from CancelDiscordScheduledEvent) ---
@@ -1488,6 +1471,7 @@ impl Tool for GetEventSubscribers {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -1523,3 +1507,10 @@ impl Tool for GetEventSubscribers {
         }
     }
 }
+
+impl_new!(
+    CreateScheduledEventTool,
+    ListEvents,
+    UpdateOrCancelEvent,
+    GetEventSubscribers
+);

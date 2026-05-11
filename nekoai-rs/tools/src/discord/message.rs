@@ -6,18 +6,23 @@
 use std::sync::Arc;
 
 use rig::{completion::ToolDefinition, tool::Tool};
+use serde::Deserialize;
 use serde_json::{Value, json};
 use serenity::{
-    all::{ExecuteWebhook, GetMessages, Webhook},
+    all::{ChannelId, ExecuteWebhook, GetMessages, Webhook},
     http::Http,
 };
+use tracing;
 
-use crate::discord::{
-    error::DiscordToolError,
-    helpers::{
-        err, get_bool, get_channel_id, get_message_id, get_string, get_u8, get_u64_list, ok,
-        parse_reaction_type, retry_discord, to_value,
+use crate::{
+    discord::{
+        error::DiscordToolError,
+        helpers::{
+            err, get_bool, get_channel_id, get_message_id, get_string, get_u8, ok,
+            parse_reaction_type, retry_discord, to_value,
+        },
     },
+    impl_new,
 };
 
 // ===========================================================================
@@ -28,40 +33,12 @@ pub struct FetchReadableChatHistory {
     http: Arc<Http>,
 }
 
-pub struct SearchChannelMessages {
-    http: Arc<Http>,
-}
-
 pub struct CreatePoll {
     http: Arc<Http>,
 }
 
 pub struct SendAnnouncementWithPin {
     http: Arc<Http>,
-}
-
-impl FetchReadableChatHistory {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl SearchChannelMessages {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl CreatePoll {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl SendAnnouncementWithPin {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
 }
 
 impl Tool for FetchReadableChatHistory {
@@ -105,6 +82,7 @@ impl Tool for FetchReadableChatHistory {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(channel_id) = get_channel_id(&args, "channel_id") else {
             return Ok(err("channel_id is required"));
         };
@@ -160,117 +138,32 @@ impl Tool for FetchReadableChatHistory {
     }
 }
 
-impl Tool for SearchChannelMessages {
-    const NAME: &'static str = "search_channel_messages";
+// ===========================================================================
+// Type-safe argument structs
+// ===========================================================================
 
-    type Error = DiscordToolError;
-    type Args = Value;
-    type Output = Value;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: concat!(
-                "Search recent messages in a channel by keyword and optionally by author. ",
-                "Returns only matching messages with their IDs, author info, and content. ",
-                "Useful for finding past discussions, locating specific information, ",
-                "or checking if a topic has been mentioned before."
-            )
-            .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "channel_id": {
-                        "type": "integer",
-                        "description": "The Discord channel ID (snowflake)."
-                    },
-                    "query": {
-                        "type": "string",
-                        "description": "Keyword or phrase to search for (case-insensitive partial match)."
-                    },
-                    "author_name": {
-                        "type": "string",
-                        "description": "Filter by author name (partial match, case-insensitive)."
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "Number of recent messages to scan through (1-100, default 50)."
-                    }
-                },
-                "required": ["channel_id", "query"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let Some(channel_id) = get_channel_id(&args, "channel_id") else {
-            return Ok(err("channel_id is required"));
-        };
-        let Some(query) = get_string(&args, "query") else {
-            return Ok(err("query is required"));
-        };
-        let author_name = get_string(&args, "author_name");
-        let limit = get_u8(&args, "limit").unwrap_or(50).min(100);
-
-        let query_lower = query.to_lowercase();
-        let author_lower = author_name.as_ref().map(|a| a.to_lowercase());
-
-        let http = self.http.clone();
-        match retry_discord(|| {
-            let http = http.clone();
-            async move {
-                let builder = GetMessages::new().limit(limit);
-                channel_id.messages(&http, builder).await
-            }
-        })
-        .await
-        {
-            Ok(messages) => {
-                let matches: Vec<Value> = messages
-                    .into_iter()
-                    .filter(|msg| {
-                        let content_match = msg.content.to_lowercase().contains(&query_lower);
-                        let author_match = match &author_lower {
-                            Some(a) => {
-                                msg.author.name.to_lowercase().contains(a)
-                                    || msg
-                                        .author
-                                        .global_name
-                                        .as_ref()
-                                        .is_some_and(|g| g.to_lowercase().contains(a))
-                            }
-                            None => true,
-                        };
-
-                        content_match && author_match
-                    })
-                    .map(|msg| {
-                        let author_name = msg
-                            .author
-                            .global_name
-                            .as_deref()
-                            .unwrap_or(&msg.author.name);
-                        json!({
-                            "id": msg.id.get(),
-                            "author": msg.author.name,
-                            "author_display": author_name,
-                            "timestamp": msg.timestamp.to_string(),
-                            "content": msg.content,
-                        })
-                    })
-                    .collect();
-
-                Ok(ok(json!({
-                    "channel_id": channel_id.get(),
-                    "scanned": limit,
-                    "total_matches": matches.len(),
-                    "matches": matches,
-                })))
-            }
-            Err(error) => Ok(err(format!("Failed to search messages: {error}"))),
-        }
-    }
+#[derive(Deserialize)]
+pub struct CreatePollArgs {
+    pub channel_id: u64,
+    pub question: String,
+    pub options: Vec<String>,
 }
+
+#[derive(Deserialize)]
+pub struct SendMessageArgs {
+    pub channel_id: u64,
+    pub content: String,
+}
+
+#[derive(Deserialize)]
+pub struct BulkDeleteMessagesArgs {
+    pub channel_id: u64,
+    pub message_ids: Vec<u64>,
+}
+
+// ===========================================================================
+// Poll creation tool
+// ===========================================================================
 
 const POLL_EMOJI_NUMBERS: &[&str] = &[
     "1\u{FE0F}\u{20E3}",
@@ -289,7 +182,7 @@ impl Tool for CreatePoll {
     const NAME: &'static str = "create_poll";
 
     type Error = DiscordToolError;
-    type Args = Value;
+    type Args = CreatePollArgs;
     type Output = Value;
 
     async fn definition(&self, _prompt: String) -> ToolDefinition {
@@ -320,27 +213,24 @@ impl Tool for CreatePoll {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let Some(channel_id) = get_channel_id(&args, "channel_id") else {
-            return Ok(err("channel_id is required"));
-        };
-        let Some(question) = get_string(&args, "question") else {
-            return Ok(err("question is required"));
-        };
-        let options: Vec<String> = args
-            .get("options")
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(String::from))
-                    .collect()
-            })
-            .unwrap_or_default();
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
+        let channel_id = ChannelId::new(args.channel_id);
+        let question = args.question;
+        let options = args.options;
 
         if options.len() < 2 {
             return Ok(err("At least 2 options are required for a poll"));
         }
         if options.len() > 10 {
             return Ok(err("Maximum 10 options allowed"));
+        }
+        for option in &options {
+            if option.len() > 100 {
+                return Ok(err(format!(
+                    "Option exceeds 100 character limit: {}",
+                    option.chars().take(30).collect::<String>()
+                )));
+            }
         }
 
         let mut poll_text = format!("📊 **Poll: {}**\n\n", question);
@@ -388,14 +278,22 @@ impl Tool for CreatePoll {
             }
         }
 
+        if !failed_reactions.is_empty() {
+            // Rollback: delete the poll message
+            let _ = channel_id.delete_message(&self.http, poll_msg.id).await;
+            return Ok(err(format!(
+                "Failed to add reactions for options: {:?}. Poll message deleted.",
+                failed_reactions
+            )));
+        }
+
         Ok(ok(json!({
             "success": true,
             "message_id": poll_msg.id.get(),
             "channel_id": channel_id.get(),
             "question": question,
             "option_count": options.len(),
-            "reactions_added": options.len() - failed_reactions.len(),
-            "failed_reactions": if failed_reactions.is_empty() { Value::Null } else { json!(failed_reactions) },
+            "reactions_added": options.len(),
         })))
     }
 }
@@ -429,6 +327,7 @@ impl Tool for SendAnnouncementWithPin {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(channel_id) = get_channel_id(&args, "channel_id") else {
             return Ok(err("channel_id is required"));
         };
@@ -479,15 +378,9 @@ impl Tool for SendAnnouncementWithPin {
                 "pinned": true,
                 "urgent": urgent,
             }))),
-            Err(error) => Ok(ok(json!({
-                "success": true,
-                "message_id": sent_msg.id.get(),
-                "channel_id": channel_id.get(),
-                "title": title,
-                "pinned": false,
-                "pin_error": error.to_string(),
-                "urgent": urgent,
-            }))),
+            Err(error) => Ok(err(
+                format!("Announcement sent but failed to pin: {error}",),
+            )),
         }
     }
 }
@@ -520,46 +413,10 @@ pub struct SendWebhookMessage {
     http: Arc<Http>,
 }
 
-impl SendMessageTool {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl SearchMessages {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl BulkDeleteMessages {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl PinMessage {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl AddReaction {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl SendWebhookMessage {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
 impl Tool for SendMessageTool {
     const NAME: &'static str = "send_message";
     type Error = DiscordToolError;
-    type Args = Value;
+    type Args = SendMessageArgs;
     type Output = Value;
 
     async fn definition(&self, _prompt: String) -> ToolDefinition {
@@ -578,17 +435,13 @@ impl Tool for SendMessageTool {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let Some(channel_id) = get_channel_id(&args, "channel_id") else {
-            return Ok(err("channel_id is required"));
-        };
-        crate::admin_guard_channel!(&self.http, channel_id);
-
-        let content = get_string(&args, "content")
-            .or_else(|| get_string(&args, "message"))
-            .unwrap_or_default();
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
+        crate::admin_guard_channel!(&self.http, ChannelId::new(args.channel_id));
+        let content = args.content;
         if content.trim().is_empty() {
             return Ok(err("content is required"));
         }
+        let channel_id = ChannelId::new(args.channel_id);
 
         match retry_discord(|| {
             let http = self.http.clone();
@@ -628,6 +481,7 @@ impl Tool for SearchMessages {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(channel_id) = get_channel_id(&args, "channel_id") else {
             return Ok(err("channel_id is required"));
         };
@@ -700,7 +554,7 @@ impl Tool for SearchMessages {
 impl Tool for BulkDeleteMessages {
     const NAME: &'static str = "bulk_delete_messages";
     type Error = DiscordToolError;
-    type Args = Value;
+    type Args = BulkDeleteMessagesArgs;
     type Output = Value;
 
     async fn definition(&self, _prompt: String) -> ToolDefinition {
@@ -719,13 +573,19 @@ impl Tool for BulkDeleteMessages {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let Some(channel_id) = get_channel_id(&args, "channel_id") else {
-            return Ok(err("channel_id is required"));
-        };
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
+        let channel_id = ChannelId::new(args.channel_id);
         crate::admin_guard_channel!(&self.http, channel_id);
-        let Some(message_ids) = get_u64_list(&args, "message_ids") else {
-            return Ok(err("message_ids is required"));
-        };
+        let message_ids = args.message_ids;
+
+        if message_ids.is_empty() {
+            return Ok(err("At least one message_id is required"));
+        }
+        if message_ids.len() > 100 {
+            return Ok(err(
+                "Maximum 100 messages can be deleted at once. Discord API limit.",
+            ));
+        }
 
         let message_ids = message_ids
             .into_iter()
@@ -768,6 +628,7 @@ impl Tool for PinMessage {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(channel_id) = get_channel_id(&args, "channel_id") else {
             return Ok(err("channel_id is required"));
         };
@@ -840,6 +701,7 @@ impl Tool for AddReaction {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(channel_id) = get_channel_id(&args, "channel_id") else {
             return Ok(err("channel_id is required"));
         };
@@ -895,6 +757,7 @@ impl Tool for SendWebhookMessage {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(channel_id) = get_channel_id(&args, "channel_id") else {
             return Ok(err("channel_id is required"));
         };
@@ -931,3 +794,15 @@ impl Tool for SendWebhookMessage {
         }
     }
 }
+
+impl_new!(
+    FetchReadableChatHistory,
+    CreatePoll,
+    SendAnnouncementWithPin,
+    SendMessageTool,
+    SearchMessages,
+    BulkDeleteMessages,
+    PinMessage,
+    AddReaction,
+    SendWebhookMessage,
+);

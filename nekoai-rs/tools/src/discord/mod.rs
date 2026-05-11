@@ -31,8 +31,7 @@ pub use member::{
 };
 pub use message::{
     AddReaction, BulkDeleteMessages, CreatePoll, FetchReadableChatHistory, PinMessage,
-    SearchChannelMessages, SearchMessages, SendAnnouncementWithPin, SendMessageTool,
-    SendWebhookMessage,
+    SearchMessages, SendAnnouncementWithPin, SendMessageTool, SendWebhookMessage,
 };
 pub use role::{
     AssignRoleByName, AssignRoleToMultipleMembers, AssignRoles, ClearRoleFromAllMembers,

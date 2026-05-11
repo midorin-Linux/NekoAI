@@ -363,3 +363,24 @@ pub async fn resolve_role_ids(http: &Http, guild_id: GuildId, queries: &[String]
     }
     ids
 }
+
+/// Macro to generate a standard `pub fn new(http: Arc<Http>) -> Self` constructor
+/// for tool structs that have a single `http: Arc<Http>` field.
+///
+/// Usage:
+/// ```ignore
+/// impl_new!(SendMessageTool, CreatePoll, ListRoles);
+/// ```
+#[macro_export]
+macro_rules! impl_new {
+    ($($ty:ty),* $(,)?) => {
+        $(
+            impl $ty {
+                #[allow(dead_code)]
+                pub fn new(http: Arc<serenity::http::Http>) -> Self {
+                    Self { http }
+                }
+            }
+        )*
+    };
+}

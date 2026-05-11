@@ -16,8 +16,7 @@ use nekoai_tools::discord::{
     },
     message::{
         AddReaction, BulkDeleteMessages, CreatePoll, FetchReadableChatHistory, PinMessage,
-        SearchChannelMessages, SearchMessages, SendAnnouncementWithPin, SendMessageTool,
-        SendWebhookMessage,
+        SearchMessages, SendAnnouncementWithPin, SendMessageTool, SendWebhookMessage,
     },
     role::{
         AssignRoleByName, AssignRoleToMultipleMembers, AssignRoles, ClearRoleFromAllMembers,
@@ -109,7 +108,6 @@ impl DiscordClient {
             AddReaction::new(http.clone()),
             SendWebhookMessage::new(http.clone()),
             FetchReadableChatHistory::new(http.clone()),
-            SearchChannelMessages::new(http.clone()),
             CreatePoll::new(http.clone()),
             SendAnnouncementWithPin::new(http.clone()),
             ListRoles::new(http.clone()),

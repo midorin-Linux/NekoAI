@@ -7,14 +7,18 @@ use serenity::{
     all::{EditMember, Permissions},
     http::Http,
 };
+use tracing;
 
-use crate::discord::{
-    error::DiscordToolError,
-    helpers::{
-        err, fetch_guild_members, get_bool, get_guild_id_default, get_string, get_u64, get_user_id,
-        ok, resolve_relative_timestamp, resolve_role_id, resolve_role_ids, resolve_user_id,
-        retry_discord, snowflake_to_datetime, to_value,
+use crate::{
+    discord::{
+        error::DiscordToolError,
+        helpers::{
+            err, fetch_guild_members, get_bool, get_guild_id_default, get_string, get_u64,
+            get_user_id, ok, resolve_relative_timestamp, resolve_role_id, resolve_role_ids,
+            resolve_user_id, retry_discord, snowflake_to_datetime, to_value,
+        },
     },
+    impl_new,
 };
 
 pub struct SearchMembers {
@@ -35,36 +39,6 @@ pub struct InvestigateMember {
 
 pub struct ModerateMember {
     http: Arc<Http>,
-}
-
-impl SearchMembers {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl ManageMemberRoles {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl TimeoutMember {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl InvestigateMember {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl ModerateMember {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
 }
 
 impl Tool for SearchMembers {
@@ -92,6 +66,7 @@ impl Tool for SearchMembers {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -216,6 +191,7 @@ impl Tool for ManageMemberRoles {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -339,6 +315,7 @@ impl Tool for TimeoutMember {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -410,9 +387,12 @@ impl Tool for InvestigateMember {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
+        crate::admin_guard_guild!(&self.http, guild_id);
+
         let target = match get_string(&args, "target") {
             Some(t) => t,
             None => return Ok(err("target is required")),
@@ -538,6 +518,7 @@ impl Tool for ModerateMember {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -636,24 +617,6 @@ pub struct GetMemberActivity {
     http: Arc<Http>,
 }
 
-impl UpdateMemberNickname {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl KickMember {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl GetMemberActivity {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
 impl Tool for UpdateMemberNickname {
     const NAME: &'static str = "update_member_nickname";
     type Error = DiscordToolError;
@@ -677,6 +640,7 @@ impl Tool for UpdateMemberNickname {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -727,6 +691,7 @@ impl Tool for KickMember {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -783,6 +748,7 @@ impl Tool for GetMemberActivity {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -839,3 +805,14 @@ impl Tool for GetMemberActivity {
         })))
     }
 }
+
+impl_new!(
+    SearchMembers,
+    ManageMemberRoles,
+    TimeoutMember,
+    InvestigateMember,
+    ModerateMember,
+    UpdateMemberNickname,
+    KickMember,
+    GetMemberActivity
+);

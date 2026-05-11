@@ -6,13 +6,18 @@ use serenity::{
     all::{EditRole, Permissions, RoleId},
     http::Http,
 };
+use tracing;
 
-use crate::discord::{
-    error::DiscordToolError,
-    helpers::{
-        err, fetch_guild_members, get_bool, get_guild_id_default, get_string, get_u64,
-        get_u64_list, ok, parse_colour, resolve_role_id, resolve_user_id, retry_discord, to_value,
+use crate::{
+    discord::{
+        error::DiscordToolError,
+        helpers::{
+            err, fetch_guild_members, get_bool, get_guild_id_default, get_string, get_u64,
+            get_u64_list, ok, parse_colour, resolve_role_id, resolve_user_id, retry_discord,
+            to_value,
+        },
     },
+    impl_new,
 };
 
 // =============================================================================
@@ -47,46 +52,24 @@ pub struct DuplicateRole {
     http: Arc<Http>,
 }
 
-impl AssignRoleByName {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
+pub struct ListRoles {
+    http: Arc<Http>,
 }
 
-impl RevokeRoleByName {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
+pub struct UpsertRole {
+    http: Arc<Http>,
 }
 
-impl GetMembersWithRole {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
+pub struct AssignRoles {
+    http: Arc<Http>,
 }
 
-impl ClearRoleFromAllMembers {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
+pub struct ReorderRoles {
+    http: Arc<Http>,
 }
 
-impl AssignRoleToMultipleMembers {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl CreateAndAssignRole {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl DuplicateRole {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
+pub struct ListRoleMembers {
+    http: Arc<Http>,
 }
 
 // ---------------------------------------------------------------------------
@@ -116,6 +99,7 @@ impl Tool for AssignRoleByName {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -208,6 +192,7 @@ impl Tool for RevokeRoleByName {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -300,6 +285,7 @@ impl Tool for GetMembersWithRole {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -380,6 +366,7 @@ impl Tool for ClearRoleFromAllMembers {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -468,6 +455,7 @@ impl Tool for AssignRoleToMultipleMembers {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -618,6 +606,7 @@ impl Tool for CreateAndAssignRole {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -741,6 +730,7 @@ impl Tool for DuplicateRole {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -814,56 +804,6 @@ impl Tool for DuplicateRole {
     }
 }
 
-pub struct ListRoles {
-    http: Arc<Http>,
-}
-
-pub struct UpsertRole {
-    http: Arc<Http>,
-}
-
-pub struct AssignRoles {
-    http: Arc<Http>,
-}
-
-pub struct ReorderRoles {
-    http: Arc<Http>,
-}
-
-pub struct ListRoleMembers {
-    http: Arc<Http>,
-}
-
-impl ListRoles {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl UpsertRole {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl AssignRoles {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl ReorderRoles {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl ListRoleMembers {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
 impl Tool for ListRoles {
     const NAME: &'static str = "list_roles";
     type Error = DiscordToolError;
@@ -883,6 +823,7 @@ impl Tool for ListRoles {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -929,6 +870,7 @@ impl Tool for UpsertRole {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         if get_u64(&args, "role_id").is_some() {
             // --- modify branch (inlined from ModifyDiscordRole) ---
             let Some(guild_id) = get_guild_id_default(&args) else {
@@ -1043,6 +985,7 @@ impl Tool for AssignRoles {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -1141,6 +1084,7 @@ impl Tool for ReorderRoles {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -1236,6 +1180,7 @@ impl Tool for ListRoleMembers {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
+        tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
@@ -1289,3 +1234,18 @@ impl Tool for ListRoleMembers {
         })))
     }
 }
+
+impl_new!(
+    AssignRoleByName,
+    RevokeRoleByName,
+    GetMembersWithRole,
+    ClearRoleFromAllMembers,
+    AssignRoleToMultipleMembers,
+    CreateAndAssignRole,
+    DuplicateRole,
+    ListRoles,
+    UpsertRole,
+    AssignRoles,
+    ReorderRoles,
+    ListRoleMembers,
+);
