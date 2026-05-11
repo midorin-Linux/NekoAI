@@ -12,42 +12,48 @@ use crate::discord::{
     },
 };
 
-pub struct GetDiscordEmojiList {
-    http: Arc<Http>,
-}
-pub struct CreateDiscordEmoji {
-    http: Arc<Http>,
-}
-pub struct DeleteDiscordEmoji {
-    http: Arc<Http>,
-}
-pub struct GetDiscordStickerList {
+pub struct ListEmojis {
     http: Arc<Http>,
 }
 
-impl GetDiscordEmojiList {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
+pub struct AddEmoji {
+    http: Arc<Http>,
 }
-impl CreateDiscordEmoji {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
+
+pub struct DeleteEmoji {
+    http: Arc<Http>,
 }
-impl DeleteDiscordEmoji {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
+
+pub struct GetReactionStats {
+    http: Arc<Http>,
 }
-impl GetDiscordStickerList {
+
+impl ListEmojis {
     pub fn new(http: Arc<Http>) -> Self {
         Self { http }
     }
 }
 
-impl Tool for GetDiscordEmojiList {
-    const NAME: &'static str = "get_discord_emoji_list";
+impl AddEmoji {
+    pub fn new(http: Arc<Http>) -> Self {
+        Self { http }
+    }
+}
+
+impl DeleteEmoji {
+    pub fn new(http: Arc<Http>) -> Self {
+        Self { http }
+    }
+}
+
+impl GetReactionStats {
+    pub fn new(http: Arc<Http>) -> Self {
+        Self { http }
+    }
+}
+
+impl Tool for ListEmojis {
+    const NAME: &'static str = "list_emojis";
     type Error = DiscordToolError;
     type Args = Value;
     type Output = Value;
@@ -55,10 +61,10 @@ impl Tool for GetDiscordEmojiList {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "List custom emojis in a guild.".to_string(),
+            description: "List custom guild emojis with metadata.".to_string(),
             parameters: json!({
                 "type": "object",
-                "properties": { "guild_id": { "type": "integer", "description": "Guild id." } },
+                "properties": { "guild_id": { "type": "integer" } },
                 "required": ["guild_id"]
             }),
         }
@@ -81,8 +87,8 @@ impl Tool for GetDiscordEmojiList {
     }
 }
 
-impl Tool for CreateDiscordEmoji {
-    const NAME: &'static str = "create_discord_emoji";
+impl Tool for AddEmoji {
+    const NAME: &'static str = "add_emoji";
     type Error = DiscordToolError;
     type Args = Value;
     type Output = Value;
@@ -90,13 +96,13 @@ impl Tool for CreateDiscordEmoji {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Create a custom emoji in a guild.".to_string(),
+            description: "Add a custom emoji from data URI/base64 image.".to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
-                    "guild_id": { "type": "integer", "description": "Guild id." },
-                    "name": { "type": "string", "description": "Emoji name." },
-                    "image": { "type": "string", "description": "Base64 data URI for emoji image." }
+                    "guild_id": { "type": "integer" },
+                    "name": { "type": "string" },
+                    "image": { "type": "string", "description": "data:image/...;base64,..." }
                 },
                 "required": ["guild_id", "name", "image"]
             }),
@@ -136,8 +142,8 @@ impl Tool for CreateDiscordEmoji {
     }
 }
 
-impl Tool for DeleteDiscordEmoji {
-    const NAME: &'static str = "delete_discord_emoji";
+impl Tool for DeleteEmoji {
+    const NAME: &'static str = "delete_emoji";
     type Error = DiscordToolError;
     type Args = Value;
     type Output = Value;
@@ -145,12 +151,12 @@ impl Tool for DeleteDiscordEmoji {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Delete a custom emoji from a guild.".to_string(),
+            description: "Delete a custom guild emoji.".to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
-                    "guild_id": { "type": "integer", "description": "Guild id." },
-                    "emoji_id": { "type": "integer", "description": "Emoji id." }
+                    "guild_id": { "type": "integer" },
+                    "emoji_id": { "type": "integer" }
                 },
                 "required": ["guild_id", "emoji_id"]
             }),
@@ -176,163 +182,6 @@ impl Tool for DeleteDiscordEmoji {
             Ok(()) => Ok(ok(json!({ "deleted": true }))),
             Err(error) => Ok(err(format!("Failed to delete emoji: {error}"))),
         }
-    }
-}
-
-impl Tool for GetDiscordStickerList {
-    const NAME: &'static str = "get_discord_sticker_list";
-    type Error = DiscordToolError;
-    type Args = Value;
-    type Output = Value;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "List guild stickers.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": { "guild_id": { "type": "integer", "description": "Guild id." } },
-                "required": ["guild_id"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let Some(guild_id) = get_guild_id_default(&args) else {
-            return Ok(err("guild_id is required"));
-        };
-        let http = self.http.clone();
-        match retry_discord(|| {
-            let http = http.clone();
-            async move { guild_id.stickers(&http).await }
-        })
-        .await
-        {
-            Ok(stickers) => Ok(ok(to_value(&stickers))),
-            Err(error) => Ok(err(format!("Failed to fetch stickers: {error}"))),
-        }
-    }
-}
-
-pub struct ListEmojis {
-    inner: GetDiscordEmojiList,
-}
-
-pub struct AddEmoji {
-    inner: CreateDiscordEmoji,
-}
-
-pub struct DeleteEmoji {
-    inner: DeleteDiscordEmoji,
-}
-
-pub struct GetReactionStats {
-    http: Arc<Http>,
-}
-
-impl ListEmojis {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self {
-            inner: GetDiscordEmojiList::new(http),
-        }
-    }
-}
-
-impl AddEmoji {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self {
-            inner: CreateDiscordEmoji::new(http),
-        }
-    }
-}
-
-impl DeleteEmoji {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self {
-            inner: DeleteDiscordEmoji::new(http),
-        }
-    }
-}
-
-impl GetReactionStats {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl Tool for ListEmojis {
-    const NAME: &'static str = "list_emojis";
-    type Error = DiscordToolError;
-    type Args = Value;
-    type Output = Value;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "List custom guild emojis with metadata.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": { "guild_id": { "type": "integer" } },
-                "required": ["guild_id"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        self.inner.call(args).await
-    }
-}
-
-impl Tool for AddEmoji {
-    const NAME: &'static str = "add_emoji";
-    type Error = DiscordToolError;
-    type Args = Value;
-    type Output = Value;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Add a custom emoji from data URI/base64 image.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "guild_id": { "type": "integer" },
-                    "name": { "type": "string" },
-                    "image": { "type": "string", "description": "data:image/...;base64,..." }
-                },
-                "required": ["guild_id", "name", "image"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        self.inner.call(args).await
-    }
-}
-
-impl Tool for DeleteEmoji {
-    const NAME: &'static str = "delete_emoji";
-    type Error = DiscordToolError;
-    type Args = Value;
-    type Output = Value;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Delete a custom guild emoji.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "guild_id": { "type": "integer" },
-                    "emoji_id": { "type": "integer" }
-                },
-                "required": ["guild_id", "emoji_id"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        self.inner.call(args).await
     }
 }
 

@@ -3,8 +3,8 @@ use std::sync::Arc;
 use rig::{completion::ToolDefinition, tool::Tool};
 use serde_json::{Value, json};
 use serenity::{
-    all::{AuditLogEntryId, CreateAttachment, EditGuild, GuildId, audit_log::Action},
-    http::{GuildPagination, Http},
+    all::{AuditLogEntryId, CreateAttachment, EditGuild, audit_log::Action},
+    http::Http,
 };
 
 use crate::discord::{
@@ -15,52 +15,50 @@ use crate::discord::{
     },
 };
 
-pub struct GetDiscordGuildInfo {
+// --- High-level wrapper structs (keep, with inlined Tool impls) ---
+
+pub struct GetGuildInfo {
     http: Arc<Http>,
 }
 
-pub struct GetDiscordGuildList {
+pub struct UpdateGuildSettings {
     http: Arc<Http>,
 }
 
-pub struct ModifyDiscordGuild {
+pub struct GetAuditLog {
     http: Arc<Http>,
 }
 
-pub struct GetDiscordAuditLog {
+pub struct ManageBans {
     http: Arc<Http>,
 }
 
-pub struct GetGuildSummary {
-    _http: Arc<Http>,
-}
-
-impl GetDiscordGuildInfo {
+impl GetGuildInfo {
     pub fn new(http: Arc<Http>) -> Self {
         Self { http }
     }
 }
 
-impl GetDiscordGuildList {
+impl UpdateGuildSettings {
     pub fn new(http: Arc<Http>) -> Self {
         Self { http }
     }
 }
 
-impl ModifyDiscordGuild {
+impl GetAuditLog {
     pub fn new(http: Arc<Http>) -> Self {
         Self { http }
     }
 }
 
-impl GetDiscordAuditLog {
+impl ManageBans {
     pub fn new(http: Arc<Http>) -> Self {
         Self { http }
     }
 }
 
-impl Tool for GetDiscordGuildInfo {
-    const NAME: &'static str = "get_discord_guild_info";
+impl Tool for GetGuildInfo {
+    const NAME: &'static str = "get_guild_info";
 
     type Error = DiscordToolError;
     type Args = Value;
@@ -69,12 +67,10 @@ impl Tool for GetDiscordGuildInfo {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Get guild information.".to_string(),
+            description: "Get guild metadata, features, and high-level statistics.".to_string(),
             parameters: json!({
                 "type": "object",
-                "properties": {
-                    "guild_id": { "type": "integer", "description": "Guild id." }
-                },
+                "properties": { "guild_id": { "type": "integer" } },
                 "required": ["guild_id"]
             }),
         }
@@ -98,8 +94,8 @@ impl Tool for GetDiscordGuildInfo {
     }
 }
 
-impl Tool for GetDiscordGuildList {
-    const NAME: &'static str = "get_discord_guild_list";
+impl Tool for UpdateGuildSettings {
+    const NAME: &'static str = "update_guild_settings";
 
     type Error = DiscordToolError;
     type Args = Value;
@@ -108,57 +104,15 @@ impl Tool for GetDiscordGuildList {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "List guilds bot is in.".to_string(),
+            description: "Update guild settings including icon and description.".to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
-                    "limit": { "type": "integer", "description": "Max guilds to return (1-200)." },
-                    "after": { "type": "integer", "description": "Return guilds after this guild id." }
-                }
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let limit = get_u64(&args, "limit");
-        let after = get_u64(&args, "after");
-
-        let http = self.http.clone();
-        match retry_discord(|| {
-            let http = http.clone();
-            async move {
-                let pagination =
-                    after.map(|guild_id| GuildPagination::After(GuildId::new(guild_id)));
-                http.get_guilds(pagination, limit).await
-            }
-        })
-        .await
-        {
-            Ok(guilds) => Ok(ok(to_value(&guilds))),
-            Err(error) => Ok(err(format!("Failed to fetch guild list: {error}"))),
-        }
-    }
-}
-
-impl Tool for ModifyDiscordGuild {
-    const NAME: &'static str = "modify_discord_guild";
-
-    type Error = DiscordToolError;
-    type Args = Value;
-    type Output = Value;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Modify guild settings such as name or icon.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "guild_id": { "type": "integer", "description": "Guild id." },
-                    "name": { "type": "string", "description": "New guild name." },
-                    "description": { "type": "string", "description": "New guild description." },
-                    "icon_path": { "type": "string", "description": "Local path to PNG icon file." },
-                    "clear_icon": { "type": "boolean", "description": "Clear current icon." }
+                    "guild_id": { "type": "integer" },
+                    "name": { "type": "string" },
+                    "description": { "type": "string" },
+                    "icon_path": { "type": "string" },
+                    "clear_icon": { "type": "boolean" }
                 },
                 "required": ["guild_id"]
             }),
@@ -214,8 +168,8 @@ impl Tool for ModifyDiscordGuild {
     }
 }
 
-impl Tool for GetDiscordAuditLog {
-    const NAME: &'static str = "get_discord_audit_log";
+impl Tool for GetAuditLog {
+    const NAME: &'static str = "get_audit_log";
 
     type Error = DiscordToolError;
     type Args = Value;
@@ -224,15 +178,15 @@ impl Tool for GetDiscordAuditLog {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Fetch guild audit log entries.".to_string(),
+            description: "Fetch filtered audit log entries for a guild.".to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
-                    "guild_id": { "type": "integer", "description": "Guild id." },
-                    "action_type": { "type": "integer", "description": "Audit log action type number." },
-                    "user_id": { "type": "integer", "description": "Filter by user id." },
-                    "before": { "type": "integer", "description": "Fetch entries before this audit log entry id." },
-                    "limit": { "type": "integer", "description": "Number of entries to return." }
+                    "guild_id": { "type": "integer" },
+                    "action_type": { "type": "integer" },
+                    "user_id": { "type": "integer" },
+                    "before": { "type": "integer" },
+                    "limit": { "type": "integer" }
                 },
                 "required": ["guild_id"]
             }),
@@ -263,133 +217,6 @@ impl Tool for GetDiscordAuditLog {
             Ok(log) => Ok(ok(to_value(&log))),
             Err(error) => Ok(err(format!("Failed to fetch audit log: {error}"))),
         }
-    }
-}
-
-pub struct GetGuildInfo {
-    inner: GetDiscordGuildInfo,
-}
-
-pub struct UpdateGuildSettings {
-    inner: ModifyDiscordGuild,
-}
-
-pub struct GetAuditLog {
-    inner: GetDiscordAuditLog,
-}
-
-pub struct ManageBans {
-    http: Arc<Http>,
-}
-
-impl GetGuildInfo {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self {
-            inner: GetDiscordGuildInfo::new(http),
-        }
-    }
-}
-
-impl UpdateGuildSettings {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self {
-            inner: ModifyDiscordGuild::new(http),
-        }
-    }
-}
-
-impl GetAuditLog {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self {
-            inner: GetDiscordAuditLog::new(http),
-        }
-    }
-}
-
-impl ManageBans {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl Tool for GetGuildInfo {
-    const NAME: &'static str = "get_guild_info";
-    type Error = DiscordToolError;
-    type Args = Value;
-    type Output = Value;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Get guild metadata, features, and high-level statistics.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": { "guild_id": { "type": "integer" } },
-                "required": ["guild_id"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        self.inner.call(args).await
-    }
-}
-
-impl Tool for UpdateGuildSettings {
-    const NAME: &'static str = "update_guild_settings";
-    type Error = DiscordToolError;
-    type Args = Value;
-    type Output = Value;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Update guild settings including icon and description.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "guild_id": { "type": "integer" },
-                    "name": { "type": "string" },
-                    "description": { "type": "string" },
-                    "icon_path": { "type": "string" },
-                    "clear_icon": { "type": "boolean" }
-                },
-                "required": ["guild_id"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        self.inner.call(args).await
-    }
-}
-
-impl Tool for GetAuditLog {
-    const NAME: &'static str = "get_audit_log";
-    type Error = DiscordToolError;
-    type Args = Value;
-    type Output = Value;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Fetch filtered audit log entries for a guild.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "guild_id": { "type": "integer" },
-                    "action_type": { "type": "integer" },
-                    "user_id": { "type": "integer" },
-                    "before": { "type": "integer" },
-                    "limit": { "type": "integer" }
-                },
-                "required": ["guild_id"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        self.inner.call(args).await
     }
 }
 

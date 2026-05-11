@@ -26,13 +26,19 @@ pub use error::DiscordToolError;
 pub use guild::{GetAuditLog, GetGuildInfo, ManageBans, UpdateGuildSettings};
 pub use invite::{CreateInviteTool, ListInvites, RevokeInvite};
 pub use member::{
-    GetMemberActivity, KickMember, SearchMembers, TimeoutMember, UpdateMemberNickname,
+    GetMemberActivity, InvestigateMember, KickMember, ManageMemberRoles, ModerateMember,
+    SearchMembers, TimeoutMember, UpdateMemberNickname,
 };
 pub use message::{
-    AddReaction, BulkDeleteMessages, PinMessage, SearchMessages, SendMessageTool,
+    AddReaction, BulkDeleteMessages, CreatePoll, FetchReadableChatHistory, PinMessage,
+    SearchChannelMessages, SearchMessages, SendAnnouncementWithPin, SendMessageTool,
     SendWebhookMessage,
 };
-pub use role::{AssignRoles, ListRoleMembers, ListRoles, ReorderRoles, UpsertRole};
+pub use role::{
+    AssignRoleByName, AssignRoleToMultipleMembers, AssignRoles, ClearRoleFromAllMembers,
+    CreateAndAssignRole, DuplicateRole, GetMembersWithRole, ListRoleMembers, ListRoles,
+    ReorderRoles, RevokeRoleByName, UpsertRole,
+};
 pub use schedule::{
     CreateScheduledEventTool, GetEventSubscribers, ListEvents, UpdateOrCancelEvent,
 };

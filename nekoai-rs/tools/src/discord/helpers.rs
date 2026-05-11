@@ -183,6 +183,7 @@ pub fn parse_scheduled_event_status(value: &Value) -> Option<ScheduledEventStatu
     }
 }
 
+#[allow(dead_code)]
 pub fn parse_timestamp(value: &Value) -> Option<Timestamp> {
     value
         .as_str()

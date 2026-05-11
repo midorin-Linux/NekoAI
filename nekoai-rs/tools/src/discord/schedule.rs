@@ -41,41 +41,41 @@ struct ChannelMatch {
     match_reasons: Vec<String>,
 }
 
-pub struct SearchDiscordScheduledEvents {
+pub struct CreateScheduledEventTool {
     http: Arc<Http>,
 }
 
-pub struct ScheduleDiscordEvent {
+pub struct ListEvents {
     http: Arc<Http>,
 }
 
-pub struct UpdateDiscordScheduledEvent {
+pub struct UpdateOrCancelEvent {
     http: Arc<Http>,
 }
 
-pub struct CancelDiscordScheduledEvent {
+pub struct GetEventSubscribers {
     http: Arc<Http>,
 }
 
-impl SearchDiscordScheduledEvents {
+impl CreateScheduledEventTool {
     pub fn new(http: Arc<Http>) -> Self {
         Self { http }
     }
 }
 
-impl ScheduleDiscordEvent {
+impl ListEvents {
     pub fn new(http: Arc<Http>) -> Self {
         Self { http }
     }
 }
 
-impl UpdateDiscordScheduledEvent {
+impl UpdateOrCancelEvent {
     pub fn new(http: Arc<Http>) -> Self {
         Self { http }
     }
 }
 
-impl CancelDiscordScheduledEvent {
+impl GetEventSubscribers {
     pub fn new(http: Arc<Http>) -> Self {
         Self { http }
     }
@@ -866,85 +866,8 @@ fn event_match_to_value(match_item: &ScheduledEventMatch) -> Value {
     })
 }
 
-impl Tool for SearchDiscordScheduledEvents {
-    const NAME: &'static str = "search_discord_scheduled_events";
-    type Error = DiscordToolError;
-    type Args = Value;
-    type Output = Value;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: concat!(
-                "Search scheduled events in a guild. Matches against event names, descriptions, ",
-                "locations, timestamps, kind, status, and channel id. Returns concise summaries ",
-                "instead of raw Discord objects."
-            )
-            .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "guild_id": { "type": "integer", "description": "Guild id." },
-                    "query": { "type": "string", "description": "Search text for the event name, description, location, timestamps, kind, or status." },
-                    "status": { "type": "string", "enum": ["scheduled", "active", "completed", "canceled"], "description": "Optional status filter." },
-                    "kind": { "type": "string", "enum": ["voice", "stage", "external"], "description": "Optional event kind filter." },
-                    "with_user_count": { "type": "boolean", "description": "Include user counts in results." },
-                    "limit": { "type": "integer", "description": "Maximum number of results to return (default 20, max 100)." }
-                },
-                "required": ["guild_id"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let Some(guild_id) = get_guild_id_default(&args) else {
-            return Ok(err("guild_id is required"));
-        };
-
-        let query = get_trimmed_string(&args, "query");
-        let status_filter = match get_optional_event_status(&args, "status") {
-            Ok(value) => value,
-            Err(error) => return Ok(err(error)),
-        };
-        let kind_filter = match get_optional_event_kind(&args, "kind") {
-            Ok(value) => value,
-            Err(error) => return Ok(err(error)),
-        };
-        let with_user_count = get_bool(&args, "with_user_count").unwrap_or(false);
-        let limit = get_u64(&args, "limit").unwrap_or(SEARCH_LIMIT_DEFAULT as u64);
-        let limit = limit.clamp(1, SEARCH_LIMIT_MAX as u64) as usize;
-
-        let http = self.http.clone();
-        let events = match fetch_guild_scheduled_events(&http, guild_id, with_user_count).await {
-            Ok(events) => events,
-            Err(error) => return Ok(err(error)),
-        };
-
-        let matches =
-            search_scheduled_event_matches(&events, query.as_deref(), status_filter, kind_filter);
-        let returned = matches
-            .iter()
-            .take(limit)
-            .map(event_match_to_value)
-            .collect::<Vec<_>>();
-
-        Ok(ok(json!({
-            "guild_id": guild_id.get(),
-            "filters": {
-                "query": query,
-                "status": status_filter.map(event_status_label),
-                "kind": kind_filter.map(event_kind_label),
-                "with_user_count": with_user_count,
-            },
-            "total_matches": matches.len(),
-            "returned": returned.len(),
-            "events": returned,
-        })))
-    }
-}
-
-impl Tool for ScheduleDiscordEvent {
-    const NAME: &'static str = "schedule_discord_event";
+impl Tool for CreateScheduledEventTool {
+    const NAME: &'static str = "create_scheduled_event";
     type Error = DiscordToolError;
     type Args = Value;
     type Output = Value;
@@ -1127,450 +1050,6 @@ impl Tool for ScheduleDiscordEvent {
     }
 }
 
-impl Tool for UpdateDiscordScheduledEvent {
-    const NAME: &'static str = "update_discord_scheduled_event";
-    type Error = DiscordToolError;
-    type Args = Value;
-    type Output = Value;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: concat!(
-                "Update a scheduled event by exact ID, exact name, or partial keyword. The tool ",
-                "can infer the target channel or external location, and it preserves the current ",
-                "duration when start_time changes unless end_time or duration_minutes is provided."
-            )
-            .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "guild_id": { "type": "integer", "description": "Guild id." },
-                    "target_event": { "type": "string", "description": "Event id, exact name, or partial keyword." },
-                    "name": { "type": "string", "description": "New event name." },
-                    "description": { "type": "string", "description": "New event description." },
-                    "start_time": { "type": "string", "description": "New start time. Accepted forms: RFC3339, YYYY-MM-DD HH:MM, today 20:00, tomorrow 20:00, in 2h, etc." },
-                    "duration_minutes": { "type": "integer", "description": "Optional duration to derive end_time." },
-                    "end_time": { "type": "string", "description": "Optional new end time. Same formats as start_time." },
-                    "kind": { "type": "string", "enum": ["voice", "stage", "external"], "description": "Optional new event kind." },
-                    "channel_id": { "type": "integer", "description": "Voice or stage channel id." },
-                    "channel_query": { "type": "string", "description": "Voice or stage channel name, mention, or id." },
-                    "location": { "type": "string", "description": "External event location." },
-                    "status": { "type": "string", "enum": ["scheduled", "active", "completed", "canceled"], "description": "Optional new status." }
-                },
-                "required": ["guild_id", "target_event"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let Some(guild_id) = get_guild_id_default(&args) else {
-            return Ok(err("guild_id is required"));
-        };
-        crate::admin_guard_guild!(&self.http, guild_id);
-
-        let Some(target_event) = get_trimmed_string(&args, "target_event") else {
-            return Ok(err("target_event is required"));
-        };
-
-        let current_event =
-            match resolve_scheduled_event_target(&self.http, guild_id, &target_event).await {
-                Ok(event) => event,
-                Err(error) => return Ok(err(error)),
-            };
-
-        if matches!(
-            current_event.status,
-            ScheduledEventStatus::Completed | ScheduledEventStatus::Canceled
-        ) {
-            return Ok(err(
-                "Scheduled events that are completed or canceled cannot be modified",
-            ));
-        }
-
-        let requested_kind = match get_optional_event_kind(&args, "kind") {
-            Ok(value) => value,
-            Err(error) => return Ok(err(error)),
-        };
-        let requested_status = match get_optional_event_status(&args, "status") {
-            Ok(value) => value,
-            Err(error) => return Ok(err(error)),
-        };
-        let requested_name = get_trimmed_string(&args, "name");
-        let requested_description = get_trimmed_string(&args, "description");
-        let requested_start_time = match get_trimmed_string(&args, "start_time") {
-            Some(raw) => match parse_smart_timestamp(&raw) {
-                Some(timestamp) => Some(timestamp),
-                None => return Ok(err(format!("Could not parse start_time: {raw}"))),
-            },
-            None => None,
-        };
-        let requested_end_time = match get_trimmed_string(&args, "end_time") {
-            Some(raw) => match parse_smart_timestamp(&raw) {
-                Some(timestamp) => Some(timestamp),
-                None => return Ok(err(format!("Could not parse end_time: {raw}"))),
-            },
-            None => None,
-        };
-        let duration_minutes = match parse_duration_minutes(&args, "duration_minutes") {
-            Ok(value) => value,
-            Err(error) => return Ok(err(error)),
-        };
-        let channel_id = get_channel_id(&args, "channel_id");
-        let channel_query = get_trimmed_string(&args, "channel_query");
-        let location = get_trimmed_string(&args, "location");
-
-        if let Some(end_time) = requested_end_time {
-            let comparison_start = requested_start_time.unwrap_or(current_event.start_time);
-            if end_time.unix_timestamp() <= comparison_start.unix_timestamp() {
-                return Ok(err("end_time must be after start_time"));
-            }
-        }
-
-        let mut final_kind = requested_kind.unwrap_or(current_event.kind);
-        let mut resolved_channel: Option<GuildChannel> = None;
-
-        if requested_kind.is_none() {
-            if location.is_some() {
-                final_kind = ScheduledEventType::External;
-            } else if channel_id.is_some() || channel_query.is_some() {
-                let channel = match resolve_scheduled_event_channel(
-                    &self.http,
-                    guild_id,
-                    channel_id,
-                    channel_query.as_deref(),
-                    None,
-                )
-                .await
-                {
-                    Ok(channel) => channel,
-                    Err(error) => return Ok(err(error)),
-                };
-
-                match event_kind_for_channel_kind(channel.kind) {
-                    Some(kind) => {
-                        final_kind = kind;
-                        resolved_channel = Some(channel);
-                    }
-                    None => {
-                        if current_event.kind != ScheduledEventType::External {
-                            return Ok(err(
-                                "channel_query/channel_id must resolve to a voice or stage channel, or provide location for an external event",
-                            ));
-                        }
-                    }
-                }
-            }
-        }
-
-        if let Some(kind) = requested_kind {
-            final_kind = kind;
-        }
-
-        let kind_changed = final_kind != current_event.kind;
-
-        if matches!(
-            final_kind,
-            ScheduledEventType::Voice | ScheduledEventType::StageInstance
-        ) {
-            if channel_id.is_some() || channel_query.is_some() || kind_changed {
-                let desired_channel_kind = channel_kind_for_event_kind(final_kind);
-                let channel = match resolve_scheduled_event_channel(
-                    &self.http,
-                    guild_id,
-                    channel_id,
-                    channel_query.as_deref(),
-                    desired_channel_kind,
-                )
-                .await
-                {
-                    Ok(channel) => channel,
-                    Err(error) => {
-                        if kind_changed && current_event.kind == ScheduledEventType::External {
-                            return Ok(err(format!(
-                                "Changing an external event to {} requires a voice or stage channel",
-                                channel_kind_label(match final_kind {
-                                    ScheduledEventType::Voice => ChannelType::Voice,
-                                    ScheduledEventType::StageInstance => ChannelType::Stage,
-                                    ScheduledEventType::External => ChannelType::Text,
-                                    _ => ChannelType::Text,
-                                })
-                            )));
-                        }
-                        return Ok(err(error));
-                    }
-                };
-
-                if !channel_matches_event_kind(&channel, final_kind) {
-                    return Ok(err(format!(
-                        "Channel {} is not a {} channel",
-                        channel.name,
-                        channel_kind_label(channel.kind)
-                    )));
-                }
-
-                resolved_channel = Some(channel);
-            } else if current_event.kind == ScheduledEventType::External {
-                return Ok(err(
-                    "Changing an external event to voice or stage requires channel_id or channel_query",
-                ));
-            }
-        } else if final_kind == ScheduledEventType::External {
-            if kind_changed && location.is_none() {
-                return Ok(err(
-                    "location is required when changing a scheduled event to external",
-                ));
-            }
-            if current_event.kind != ScheduledEventType::External && location.is_none() {
-                return Ok(err("location is required for external scheduled events"));
-            }
-        }
-
-        let start_time = requested_start_time.unwrap_or(current_event.start_time);
-        let end_time = determine_update_end_time(
-            start_time,
-            &current_event,
-            requested_start_time.is_some(),
-            duration_minutes,
-            requested_end_time,
-            final_kind,
-        );
-
-        let mut builder = EditScheduledEvent::new();
-        let mut changed_fields = Vec::new();
-
-        if let Some(name) = requested_name {
-            builder = builder.name(name);
-            changed_fields.push("name");
-        }
-        if let Some(description) = requested_description {
-            builder = builder.description(description);
-            changed_fields.push("description");
-        }
-        if let Some(start_time) = requested_start_time {
-            builder = builder.start_time(start_time);
-            changed_fields.push("start_time");
-        }
-        if let Some(end_time) = end_time {
-            builder = builder.end_time(end_time);
-            changed_fields.push("end_time");
-        }
-        if kind_changed {
-            builder = builder.kind(final_kind);
-            changed_fields.push("kind");
-        }
-        if let Some(channel) = &resolved_channel {
-            builder = builder.channel_id(channel.id);
-            changed_fields.push("channel_id");
-        }
-        if final_kind == ScheduledEventType::External
-            && let Some(location) = location
-        {
-            builder = builder.location(location);
-            changed_fields.push("location");
-        }
-        if let Some(status) = requested_status {
-            let transition_is_valid = match (current_event.status, status) {
-                (ScheduledEventStatus::Scheduled, ScheduledEventStatus::Scheduled)
-                | (ScheduledEventStatus::Scheduled, ScheduledEventStatus::Active)
-                | (ScheduledEventStatus::Scheduled, ScheduledEventStatus::Canceled)
-                | (ScheduledEventStatus::Active, ScheduledEventStatus::Active)
-                | (ScheduledEventStatus::Active, ScheduledEventStatus::Completed) => true,
-                _ if current_event.status == status => true,
-                _ => false,
-            };
-
-            if !transition_is_valid {
-                return Ok(err("Invalid status transition for the scheduled event"));
-            }
-
-            builder = builder.status(status);
-            changed_fields.push("status");
-        }
-
-        if changed_fields.is_empty() {
-            return Ok(err("No scheduled event fields provided to modify"));
-        }
-
-        let http = self.http.clone();
-        let event = match retry_discord(|| {
-            let http = http.clone();
-            let builder = builder.clone();
-            async move {
-                guild_id
-                    .edit_scheduled_event(&http, current_event.id, builder)
-                    .await
-            }
-        })
-        .await
-        {
-            Ok(event) => event,
-            Err(error) => return Ok(err(format!("Failed to modify scheduled event: {error}"))),
-        };
-
-        Ok(ok(json!({
-            "updated": true,
-            "changed_fields": changed_fields,
-            "resolved_target": {
-                "input": target_event,
-                "event_id": current_event.id.get(),
-                "name": current_event.name.clone(),
-            },
-            "resolved_channel": resolved_channel.as_ref().map(channel_summary_value),
-            "event": event_summary_value(&event),
-        })))
-    }
-}
-
-impl Tool for CancelDiscordScheduledEvent {
-    const NAME: &'static str = "cancel_discord_scheduled_event";
-    type Error = DiscordToolError;
-    type Args = Value;
-    type Output = Value;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: concat!(
-                "Cancel a scheduled event by exact ID, exact name, or partial keyword. This ",
-                "tool deletes the event after resolving the best match."
-            )
-            .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "guild_id": { "type": "integer", "description": "Guild id." },
-                    "target_event": { "type": "string", "description": "Event id, exact name, or partial keyword." }
-                },
-                "required": ["guild_id", "target_event"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let Some(guild_id) = get_guild_id_default(&args) else {
-            return Ok(err("guild_id is required"));
-        };
-        crate::admin_guard_guild!(&self.http, guild_id);
-
-        let Some(target_event) = get_trimmed_string(&args, "target_event") else {
-            return Ok(err("target_event is required"));
-        };
-
-        let current_event =
-            match resolve_scheduled_event_target(&self.http, guild_id, &target_event).await {
-                Ok(event) => event,
-                Err(error) => return Ok(err(error)),
-            };
-
-        let http = self.http.clone();
-        match retry_discord(|| {
-            let http = http.clone();
-            async move {
-                guild_id
-                    .delete_scheduled_event(&http, current_event.id)
-                    .await
-            }
-        })
-        .await
-        {
-            Ok(()) => Ok(ok(json!({
-                "canceled": true,
-                "deleted": true,
-                "resolved_target": {
-                    "input": target_event,
-                    "event_id": current_event.id.get(),
-                    "name": current_event.name.clone(),
-                },
-                "event": event_summary_value(&current_event),
-            }))),
-            Err(error) => Ok(err(format!("Failed to delete scheduled event: {error}"))),
-        }
-    }
-}
-
-pub struct CreateScheduledEventTool {
-    inner: ScheduleDiscordEvent,
-}
-
-pub struct ListEvents {
-    inner: SearchDiscordScheduledEvents,
-}
-
-pub struct UpdateOrCancelEvent {
-    updater: UpdateDiscordScheduledEvent,
-    canceler: CancelDiscordScheduledEvent,
-}
-
-pub struct GetEventSubscribers {
-    http: Arc<Http>,
-}
-
-impl CreateScheduledEventTool {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self {
-            inner: ScheduleDiscordEvent::new(http),
-        }
-    }
-}
-
-impl ListEvents {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self {
-            inner: SearchDiscordScheduledEvents::new(http),
-        }
-    }
-}
-
-impl UpdateOrCancelEvent {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self {
-            updater: UpdateDiscordScheduledEvent::new(http.clone()),
-            canceler: CancelDiscordScheduledEvent::new(http),
-        }
-    }
-}
-
-impl GetEventSubscribers {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl Tool for CreateScheduledEventTool {
-    const NAME: &'static str = "create_scheduled_event";
-    type Error = DiscordToolError;
-    type Args = Value;
-    type Output = Value;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Create a Discord scheduled event.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "guild_id": { "type": "integer" },
-                    "name": { "type": "string" },
-                    "start_time": { "type": "string" },
-                    "kind": { "type": "string" },
-                    "channel_id": { "type": "integer" },
-                    "channel_query": { "type": "string" },
-                    "duration_minutes": { "type": "integer" },
-                    "end_time": { "type": "string" },
-                    "description": { "type": "string" },
-                    "location": { "type": "string" }
-                },
-                "required": ["guild_id", "name", "start_time"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        self.inner.call(args).await
-    }
-}
-
 impl Tool for ListEvents {
     const NAME: &'static str = "list_events";
     type Error = DiscordToolError;
@@ -1580,15 +1059,21 @@ impl Tool for ListEvents {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "List scheduled events with optional status and type filters.".to_string(),
+            description: concat!(
+                "Search scheduled events in a guild. Matches against event names, descriptions, ",
+                "locations, timestamps, kind, status, and channel id. Returns concise summaries ",
+                "instead of raw Discord objects."
+            )
+            .to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
-                    "guild_id": { "type": "integer" },
-                    "status": { "type": "string" },
-                    "kind": { "type": "string" },
-                    "limit": { "type": "integer" },
-                    "with_user_count": { "type": "boolean" }
+                    "guild_id": { "type": "integer", "description": "Guild id." },
+                    "query": { "type": "string", "description": "Search text for the event name, description, location, timestamps, kind, or status." },
+                    "status": { "type": "string", "enum": ["scheduled", "active", "completed", "canceled"], "description": "Optional status filter." },
+                    "kind": { "type": "string", "enum": ["voice", "stage", "external"], "description": "Optional event kind filter." },
+                    "with_user_count": { "type": "boolean", "description": "Include user counts in results." },
+                    "limit": { "type": "integer", "description": "Maximum number of results to return (default 20, max 100)." }
                 },
                 "required": ["guild_id"]
             }),
@@ -1596,7 +1081,49 @@ impl Tool for ListEvents {
     }
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        self.inner.call(args).await
+        let Some(guild_id) = get_guild_id_default(&args) else {
+            return Ok(err("guild_id is required"));
+        };
+
+        let query = get_trimmed_string(&args, "query");
+        let status_filter = match get_optional_event_status(&args, "status") {
+            Ok(value) => value,
+            Err(error) => return Ok(err(error)),
+        };
+        let kind_filter = match get_optional_event_kind(&args, "kind") {
+            Ok(value) => value,
+            Err(error) => return Ok(err(error)),
+        };
+        let with_user_count = get_bool(&args, "with_user_count").unwrap_or(false);
+        let limit = get_u64(&args, "limit").unwrap_or(SEARCH_LIMIT_DEFAULT as u64);
+        let limit = limit.clamp(1, SEARCH_LIMIT_MAX as u64) as usize;
+
+        let http = self.http.clone();
+        let events = match fetch_guild_scheduled_events(&http, guild_id, with_user_count).await {
+            Ok(events) => events,
+            Err(error) => return Ok(err(error)),
+        };
+
+        let matches =
+            search_scheduled_event_matches(&events, query.as_deref(), status_filter, kind_filter);
+        let returned = matches
+            .iter()
+            .take(limit)
+            .map(event_match_to_value)
+            .collect::<Vec<_>>();
+
+        Ok(ok(json!({
+            "guild_id": guild_id.get(),
+            "filters": {
+                "query": query,
+                "status": status_filter.map(event_status_label),
+                "kind": kind_filter.map(event_kind_label),
+                "with_user_count": with_user_count,
+            },
+            "total_matches": matches.len(),
+            "returned": returned.len(),
+            "events": returned,
+        })))
     }
 }
 
@@ -1635,9 +1162,302 @@ impl Tool for UpdateOrCancelEvent {
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         let action = get_string(&args, "action").unwrap_or_else(|| "update".to_string());
         if action == "cancel" {
-            self.canceler.call(args).await
+            // --- Cancel branch (inlined from CancelDiscordScheduledEvent) ---
+            let Some(guild_id) = get_guild_id_default(&args) else {
+                return Ok(err("guild_id is required"));
+            };
+            crate::admin_guard_guild!(&self.http, guild_id);
+
+            let Some(target_event) = get_trimmed_string(&args, "target_event") else {
+                return Ok(err("target_event is required"));
+            };
+
+            let current_event =
+                match resolve_scheduled_event_target(&self.http, guild_id, &target_event).await {
+                    Ok(event) => event,
+                    Err(error) => return Ok(err(error)),
+                };
+
+            let http = self.http.clone();
+            match retry_discord(|| {
+                let http = http.clone();
+                async move {
+                    guild_id
+                        .delete_scheduled_event(&http, current_event.id)
+                        .await
+                }
+            })
+            .await
+            {
+                Ok(()) => Ok(ok(json!({
+                    "canceled": true,
+                    "deleted": true,
+                    "resolved_target": {
+                        "input": target_event,
+                        "event_id": current_event.id.get(),
+                        "name": current_event.name.clone(),
+                    },
+                    "event": event_summary_value(&current_event),
+                }))),
+                Err(error) => Ok(err(format!("Failed to delete scheduled event: {error}"))),
+            }
         } else {
-            self.updater.call(args).await
+            // --- Update branch (inlined from UpdateDiscordScheduledEvent) ---
+            let Some(guild_id) = get_guild_id_default(&args) else {
+                return Ok(err("guild_id is required"));
+            };
+            crate::admin_guard_guild!(&self.http, guild_id);
+
+            let Some(target_event) = get_trimmed_string(&args, "target_event") else {
+                return Ok(err("target_event is required"));
+            };
+
+            let current_event =
+                match resolve_scheduled_event_target(&self.http, guild_id, &target_event).await {
+                    Ok(event) => event,
+                    Err(error) => return Ok(err(error)),
+                };
+
+            if matches!(
+                current_event.status,
+                ScheduledEventStatus::Completed | ScheduledEventStatus::Canceled
+            ) {
+                return Ok(err(
+                    "Scheduled events that are completed or canceled cannot be modified",
+                ));
+            }
+
+            let requested_kind = match get_optional_event_kind(&args, "kind") {
+                Ok(value) => value,
+                Err(error) => return Ok(err(error)),
+            };
+            let requested_status = match get_optional_event_status(&args, "status") {
+                Ok(value) => value,
+                Err(error) => return Ok(err(error)),
+            };
+            let requested_name = get_trimmed_string(&args, "name");
+            let requested_description = get_trimmed_string(&args, "description");
+            let requested_start_time = match get_trimmed_string(&args, "start_time") {
+                Some(raw) => match parse_smart_timestamp(&raw) {
+                    Some(timestamp) => Some(timestamp),
+                    None => return Ok(err(format!("Could not parse start_time: {raw}"))),
+                },
+                None => None,
+            };
+            let requested_end_time = match get_trimmed_string(&args, "end_time") {
+                Some(raw) => match parse_smart_timestamp(&raw) {
+                    Some(timestamp) => Some(timestamp),
+                    None => return Ok(err(format!("Could not parse end_time: {raw}"))),
+                },
+                None => None,
+            };
+            let duration_minutes = match parse_duration_minutes(&args, "duration_minutes") {
+                Ok(value) => value,
+                Err(error) => return Ok(err(error)),
+            };
+            let channel_id = get_channel_id(&args, "channel_id");
+            let channel_query = get_trimmed_string(&args, "channel_query");
+            let location = get_trimmed_string(&args, "location");
+
+            if let Some(end_time) = requested_end_time {
+                let comparison_start = requested_start_time.unwrap_or(current_event.start_time);
+                if end_time.unix_timestamp() <= comparison_start.unix_timestamp() {
+                    return Ok(err("end_time must be after start_time"));
+                }
+            }
+
+            let mut final_kind = requested_kind.unwrap_or(current_event.kind);
+            let mut resolved_channel: Option<GuildChannel> = None;
+
+            if requested_kind.is_none() {
+                if location.is_some() {
+                    final_kind = ScheduledEventType::External;
+                } else if channel_id.is_some() || channel_query.is_some() {
+                    let channel = match resolve_scheduled_event_channel(
+                        &self.http,
+                        guild_id,
+                        channel_id,
+                        channel_query.as_deref(),
+                        None,
+                    )
+                    .await
+                    {
+                        Ok(channel) => channel,
+                        Err(error) => return Ok(err(error)),
+                    };
+
+                    match event_kind_for_channel_kind(channel.kind) {
+                        Some(kind) => {
+                            final_kind = kind;
+                            resolved_channel = Some(channel);
+                        }
+                        None => {
+                            if current_event.kind != ScheduledEventType::External {
+                                return Ok(err(
+                                    "channel_query/channel_id must resolve to a voice or stage channel, or provide location for an external event",
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+
+            if let Some(kind) = requested_kind {
+                final_kind = kind;
+            }
+
+            let kind_changed = final_kind != current_event.kind;
+
+            if matches!(
+                final_kind,
+                ScheduledEventType::Voice | ScheduledEventType::StageInstance
+            ) {
+                if channel_id.is_some() || channel_query.is_some() || kind_changed {
+                    let desired_channel_kind = channel_kind_for_event_kind(final_kind);
+                    let channel = match resolve_scheduled_event_channel(
+                        &self.http,
+                        guild_id,
+                        channel_id,
+                        channel_query.as_deref(),
+                        desired_channel_kind,
+                    )
+                    .await
+                    {
+                        Ok(channel) => channel,
+                        Err(error) => {
+                            if kind_changed && current_event.kind == ScheduledEventType::External {
+                                return Ok(err(format!(
+                                    "Changing an external event to {} requires a voice or stage channel",
+                                    channel_kind_label(match final_kind {
+                                        ScheduledEventType::Voice => ChannelType::Voice,
+                                        ScheduledEventType::StageInstance => ChannelType::Stage,
+                                        ScheduledEventType::External => ChannelType::Text,
+                                        _ => ChannelType::Text,
+                                    })
+                                )));
+                            }
+                            return Ok(err(error));
+                        }
+                    };
+
+                    if !channel_matches_event_kind(&channel, final_kind) {
+                        return Ok(err(format!(
+                            "Channel {} is not a {} channel",
+                            channel.name,
+                            channel_kind_label(channel.kind)
+                        )));
+                    }
+
+                    resolved_channel = Some(channel);
+                } else if current_event.kind == ScheduledEventType::External {
+                    return Ok(err(
+                        "Changing an external event to voice or stage requires channel_id or channel_query",
+                    ));
+                }
+            } else if final_kind == ScheduledEventType::External {
+                if kind_changed && location.is_none() {
+                    return Ok(err(
+                        "location is required when changing a scheduled event to external",
+                    ));
+                }
+                if current_event.kind != ScheduledEventType::External && location.is_none() {
+                    return Ok(err("location is required for external scheduled events"));
+                }
+            }
+
+            let start_time = requested_start_time.unwrap_or(current_event.start_time);
+            let end_time = determine_update_end_time(
+                start_time,
+                &current_event,
+                requested_start_time.is_some(),
+                duration_minutes,
+                requested_end_time,
+                final_kind,
+            );
+
+            let mut builder = EditScheduledEvent::new();
+            let mut changed_fields = Vec::new();
+
+            if let Some(name) = requested_name {
+                builder = builder.name(name);
+                changed_fields.push("name");
+            }
+            if let Some(description) = requested_description {
+                builder = builder.description(description);
+                changed_fields.push("description");
+            }
+            if let Some(start_time) = requested_start_time {
+                builder = builder.start_time(start_time);
+                changed_fields.push("start_time");
+            }
+            if let Some(end_time) = end_time {
+                builder = builder.end_time(end_time);
+                changed_fields.push("end_time");
+            }
+            if kind_changed {
+                builder = builder.kind(final_kind);
+                changed_fields.push("kind");
+            }
+            if let Some(channel) = &resolved_channel {
+                builder = builder.channel_id(channel.id);
+                changed_fields.push("channel_id");
+            }
+            if final_kind == ScheduledEventType::External
+                && let Some(location) = location
+            {
+                builder = builder.location(location);
+                changed_fields.push("location");
+            }
+            if let Some(status) = requested_status {
+                let transition_is_valid = match (current_event.status, status) {
+                    (ScheduledEventStatus::Scheduled, ScheduledEventStatus::Scheduled)
+                    | (ScheduledEventStatus::Scheduled, ScheduledEventStatus::Active)
+                    | (ScheduledEventStatus::Scheduled, ScheduledEventStatus::Canceled)
+                    | (ScheduledEventStatus::Active, ScheduledEventStatus::Active)
+                    | (ScheduledEventStatus::Active, ScheduledEventStatus::Completed) => true,
+                    _ if current_event.status == status => true,
+                    _ => false,
+                };
+
+                if !transition_is_valid {
+                    return Ok(err("Invalid status transition for the scheduled event"));
+                }
+
+                builder = builder.status(status);
+                changed_fields.push("status");
+            }
+
+            if changed_fields.is_empty() {
+                return Ok(err("No scheduled event fields provided to modify"));
+            }
+
+            let http = self.http.clone();
+            let event = match retry_discord(|| {
+                let http = http.clone();
+                let builder = builder.clone();
+                async move {
+                    guild_id
+                        .edit_scheduled_event(&http, current_event.id, builder)
+                        .await
+                }
+            })
+            .await
+            {
+                Ok(event) => event,
+                Err(error) => return Ok(err(format!("Failed to modify scheduled event: {error}"))),
+            };
+
+            Ok(ok(json!({
+                "updated": true,
+                "changed_fields": changed_fields,
+                "resolved_target": {
+                    "input": target_event,
+                    "event_id": current_event.id.get(),
+                    "name": current_event.name.clone(),
+                },
+                "resolved_channel": resolved_channel.as_ref().map(channel_summary_value),
+                "event": event_summary_value(&event),
+            })))
         }
     }
 }

@@ -16,42 +16,48 @@ use crate::discord::{
     permission::require_current_user_admin_for_channel,
 };
 
-pub struct CreateDiscordThread {
-    http: Arc<Http>,
-}
-pub struct DeleteDiscordThread {
-    http: Arc<Http>,
-}
-pub struct GetDiscordThreadList {
-    http: Arc<Http>,
-}
-pub struct AddDiscordThreadMember {
+pub struct CreateThreadTool {
     http: Arc<Http>,
 }
 
-impl CreateDiscordThread {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
+pub struct ListThreads {
+    http: Arc<Http>,
 }
-impl DeleteDiscordThread {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
+
+pub struct ArchiveOrLockThread {
+    http: Arc<Http>,
 }
-impl GetDiscordThreadList {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
+
+pub struct ManageThreadMembers {
+    http: Arc<Http>,
 }
-impl AddDiscordThreadMember {
+
+impl CreateThreadTool {
     pub fn new(http: Arc<Http>) -> Self {
         Self { http }
     }
 }
 
-impl Tool for CreateDiscordThread {
-    const NAME: &'static str = "create_discord_thread";
+impl ListThreads {
+    pub fn new(http: Arc<Http>) -> Self {
+        Self { http }
+    }
+}
+
+impl ArchiveOrLockThread {
+    pub fn new(http: Arc<Http>) -> Self {
+        Self { http }
+    }
+}
+
+impl ManageThreadMembers {
+    pub fn new(http: Arc<Http>) -> Self {
+        Self { http }
+    }
+}
+
+impl Tool for CreateThreadTool {
+    const NAME: &'static str = "create_thread";
     type Error = DiscordToolError;
     type Args = Value;
     type Output = Value;
@@ -59,7 +65,7 @@ impl Tool for CreateDiscordThread {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Create a thread in a channel.".to_string(),
+            description: "Create a thread from a channel or source message.".to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -128,46 +134,8 @@ impl Tool for CreateDiscordThread {
     }
 }
 
-impl Tool for DeleteDiscordThread {
-    const NAME: &'static str = "delete_discord_thread";
-    type Error = DiscordToolError;
-    type Args = Value;
-    type Output = Value;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Delete a thread.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": { "thread_id": { "type": "integer", "description": "Thread channel id." } },
-                "required": ["thread_id"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let Some(thread_id) = get_channel_id(&args, "thread_id") else {
-            return Ok(err("thread_id is required"));
-        };
-        if let Err(message) = require_current_user_admin_for_channel(&self.http, thread_id).await {
-            return Ok(err(message));
-        }
-        let http = self.http.clone();
-        match retry_discord(|| {
-            let http = http.clone();
-            async move { thread_id.delete(&http).await }
-        })
-        .await
-        {
-            Ok(channel) => Ok(ok(to_value(&channel))),
-            Err(error) => Ok(err(format!("Failed to delete thread: {error}"))),
-        }
-    }
-}
-
-impl Tool for GetDiscordThreadList {
-    const NAME: &'static str = "get_discord_thread_list";
+impl Tool for ListThreads {
+    const NAME: &'static str = "list_threads";
     type Error = DiscordToolError;
     type Args = Value;
     type Output = Value;
@@ -198,150 +166,6 @@ impl Tool for GetDiscordThreadList {
             Ok(threads) => Ok(ok(to_value(&threads))),
             Err(error) => Ok(err(format!("Failed to fetch threads: {error}"))),
         }
-    }
-}
-
-impl Tool for AddDiscordThreadMember {
-    const NAME: &'static str = "add_discord_thread_member";
-    type Error = DiscordToolError;
-    type Args = Value;
-    type Output = Value;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Add a user to a thread.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "thread_id": { "type": "integer", "description": "Thread channel id." },
-                    "user_id": { "type": "integer", "description": "User id." }
-                },
-                "required": ["thread_id", "user_id"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        let Some(thread_id) = get_channel_id(&args, "thread_id") else {
-            return Ok(err("thread_id is required"));
-        };
-        if let Err(message) = require_current_user_admin_for_channel(&self.http, thread_id).await {
-            return Ok(err(message));
-        }
-        let Some(user_id) = get_user_id(&args, "user_id") else {
-            return Ok(err("user_id is required"));
-        };
-        let http = self.http.clone();
-        match retry_discord(|| {
-            let http = http.clone();
-            async move { thread_id.add_thread_member(&http, user_id).await }
-        })
-        .await
-        {
-            Ok(()) => Ok(ok(json!({ "added": true }))),
-            Err(error) => Ok(err(format!("Failed to add thread member: {error}"))),
-        }
-    }
-}
-
-pub struct CreateThreadTool {
-    inner: CreateDiscordThread,
-}
-
-pub struct ListThreads {
-    inner: GetDiscordThreadList,
-}
-
-pub struct ArchiveOrLockThread {
-    http: Arc<Http>,
-}
-
-pub struct ManageThreadMembers {
-    http: Arc<Http>,
-}
-
-impl CreateThreadTool {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self {
-            inner: CreateDiscordThread::new(http),
-        }
-    }
-}
-
-impl ListThreads {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self {
-            inner: GetDiscordThreadList::new(http),
-        }
-    }
-}
-
-impl ArchiveOrLockThread {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl ManageThreadMembers {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
-}
-
-impl Tool for CreateThreadTool {
-    const NAME: &'static str = "create_thread";
-    type Error = DiscordToolError;
-    type Args = Value;
-    type Output = Value;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Create a thread from a channel or source message.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "channel_id": { "type": "integer" },
-                    "name": { "type": "string" },
-                    "kind": { "type": "string" },
-                    "auto_archive_duration": { "type": "integer" },
-                    "rate_limit_per_user": { "type": "integer" },
-                    "invitable": { "type": "boolean" },
-                    "message_id": { "type": "integer" }
-                },
-                "required": ["channel_id", "name"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        self.inner.call(args).await
-    }
-}
-
-impl Tool for ListThreads {
-    const NAME: &'static str = "list_threads";
-    type Error = DiscordToolError;
-    type Args = Value;
-    type Output = Value;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "List active threads in a guild.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "guild_id": { "type": "integer" }
-                },
-                "required": ["guild_id"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        self.inner.call(args).await
     }
 }
 

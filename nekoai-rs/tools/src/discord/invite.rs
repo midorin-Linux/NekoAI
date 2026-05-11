@@ -12,34 +12,38 @@ use crate::discord::{
     },
 };
 
-pub struct GetDiscordInviteList {
-    http: Arc<Http>,
-}
-pub struct CreateDiscordInvite {
-    http: Arc<Http>,
-}
-pub struct DeleteDiscordInvite {
+pub struct ListInvites {
     http: Arc<Http>,
 }
 
-impl GetDiscordInviteList {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
+pub struct CreateInviteTool {
+    http: Arc<Http>,
 }
-impl CreateDiscordInvite {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self { http }
-    }
+
+pub struct RevokeInvite {
+    http: Arc<Http>,
 }
-impl DeleteDiscordInvite {
+
+impl ListInvites {
     pub fn new(http: Arc<Http>) -> Self {
         Self { http }
     }
 }
 
-impl Tool for GetDiscordInviteList {
-    const NAME: &'static str = "get_discord_invite_list";
+impl CreateInviteTool {
+    pub fn new(http: Arc<Http>) -> Self {
+        Self { http }
+    }
+}
+
+impl RevokeInvite {
+    pub fn new(http: Arc<Http>) -> Self {
+        Self { http }
+    }
+}
+
+impl Tool for ListInvites {
+    const NAME: &'static str = "list_invites";
     type Error = DiscordToolError;
     type Args = Value;
     type Output = Value;
@@ -47,7 +51,7 @@ impl Tool for GetDiscordInviteList {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "List guild invites.".to_string(),
+            description: "List guild invite links and usage stats.".to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": { "guild_id": { "type": "integer", "description": "Guild id." } },
@@ -73,8 +77,8 @@ impl Tool for GetDiscordInviteList {
     }
 }
 
-impl Tool for CreateDiscordInvite {
-    const NAME: &'static str = "create_discord_invite";
+impl Tool for CreateInviteTool {
+    const NAME: &'static str = "create_invite";
     type Error = DiscordToolError;
     type Args = Value;
     type Output = Value;
@@ -82,7 +86,7 @@ impl Tool for CreateDiscordInvite {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Create a channel invite.".to_string(),
+            description: "Create an invite with expiration and usage limits.".to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
@@ -131,8 +135,8 @@ impl Tool for CreateDiscordInvite {
     }
 }
 
-impl Tool for DeleteDiscordInvite {
-    const NAME: &'static str = "delete_discord_invite";
+impl Tool for RevokeInvite {
+    const NAME: &'static str = "revoke_invite";
     type Error = DiscordToolError;
     type Args = Value;
     type Output = Value;
@@ -140,7 +144,7 @@ impl Tool for DeleteDiscordInvite {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: Self::NAME.to_string(),
-            description: "Delete an invite by code.".to_string(),
+            description: "Revoke an invite by code.".to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": { "code": { "type": "string", "description": "Invite code." } },
@@ -166,120 +170,5 @@ impl Tool for DeleteDiscordInvite {
             Ok(invite) => Ok(ok(to_value(&invite))),
             Err(error) => Ok(err(format!("Failed to delete invite: {error}"))),
         }
-    }
-}
-
-pub struct CreateInviteTool {
-    inner: CreateDiscordInvite,
-}
-
-pub struct ListInvites {
-    inner: GetDiscordInviteList,
-}
-
-pub struct RevokeInvite {
-    inner: DeleteDiscordInvite,
-}
-
-impl CreateInviteTool {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self {
-            inner: CreateDiscordInvite::new(http),
-        }
-    }
-}
-
-impl ListInvites {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self {
-            inner: GetDiscordInviteList::new(http),
-        }
-    }
-}
-
-impl RevokeInvite {
-    pub fn new(http: Arc<Http>) -> Self {
-        Self {
-            inner: DeleteDiscordInvite::new(http),
-        }
-    }
-}
-
-impl Tool for CreateInviteTool {
-    const NAME: &'static str = "create_invite";
-    type Error = DiscordToolError;
-    type Args = Value;
-    type Output = Value;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Create an invite with expiration and usage limits.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "channel_id": { "type": "integer" },
-                    "max_age": { "type": "integer" },
-                    "max_uses": { "type": "integer" },
-                    "temporary": { "type": "boolean" },
-                    "unique": { "type": "boolean" }
-                },
-                "required": ["channel_id"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        self.inner.call(args).await
-    }
-}
-
-impl Tool for ListInvites {
-    const NAME: &'static str = "list_invites";
-    type Error = DiscordToolError;
-    type Args = Value;
-    type Output = Value;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "List guild invite links and usage stats.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "guild_id": { "type": "integer" }
-                },
-                "required": ["guild_id"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        self.inner.call(args).await
-    }
-}
-
-impl Tool for RevokeInvite {
-    const NAME: &'static str = "revoke_invite";
-    type Error = DiscordToolError;
-    type Args = Value;
-    type Output = Value;
-
-    async fn definition(&self, _prompt: String) -> ToolDefinition {
-        ToolDefinition {
-            name: Self::NAME.to_string(),
-            description: "Revoke an invite by code.".to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "code": { "type": "string" }
-                },
-                "required": ["code"]
-            }),
-        }
-    }
-
-    async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
-        self.inner.call(args).await
     }
 }
