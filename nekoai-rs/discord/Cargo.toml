@@ -5,14 +5,14 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-nekoai-agent = { workspace = true }
-nekoai-tools = { workspace = true }
-anyhow = { workspace = true }
-colored = { workspace = true }
-dialoguer = { workspace = true }
-indicatif = { workspace = true }
-nekoai-domain = { workspace = true }
-poise = { workspace = true }
-rig-core = { workspace = true }
-serenity = { workspace = true }
-tracing = { workspace = true }
+nekoai-agent.workspace = true
+nekoai-tools.workspace = true
+anyhow.workspace = true
+colored.workspace = true
+dialoguer.workspace = true
+indicatif.workspace = true
+nekoai-domain.workspace = true
+poise.workspace = true
+rig-core.workspace = true
+serenity.workspace = true
+tracing.workspace = true

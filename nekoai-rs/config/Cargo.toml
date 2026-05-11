@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-anyhow = { workspace = true }
-config = { workspace = true }
-serde = { workspace = true }
-tracing = { workspace = true }
+anyhow.workspace = true
+config.workspace = true
+serde.workspace = true
+tracing.workspace = true
