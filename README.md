@@ -80,10 +80,11 @@ NekoAI/
 ## セットアップ
 
 ### 1. 必要条件
-- [Rust](https://www.rust-lang.org/)（最新安定版 + nightly、edition 2024）
+- [Rust](https://www.rust-lang.org/)（最新安定版 + nightly）：nightly は `rustfmt.toml` で nightly 専用フォーマットオプションを使用しているため必要
 - [Qdrant](https://qdrant.tech/)（ベクトル検索を使用する場合）
 - [just](https://github.com/casey/just)（タスクランナー）
 - Docker（Qdrant コンテナ実行時）
+- **Windows ユーザー:** ルートの `justfile`（Qdrant 管理コマンド）は PowerShell 専用です。Linux / macOS では `docker` コマンドを直接使用してください（[セクション 4](#4-qdrant-のセットアップと起動ベクトル検索を使用する場合) 参照）
 
 ### 2. インストール
 ```bash
@@ -266,7 +267,7 @@ Discord へ応答送信（2000 文字超は自動分割）
 
 ### フォーマットとリンター（`nekoai-rs/` ディレクトリ内で実行）
 ```bash
-just fmt                            # コードフォーマット（nightly 必須）
+just fmt                            # コードフォーマット（nightly 必須: rustfmt.toml で nightly 機能を使用）
 cargo clippy -- -D warnings         # 静的解析
 cargo build --bin nekoai-cli        # ビルド
 ```
