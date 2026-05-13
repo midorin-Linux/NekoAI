@@ -55,8 +55,13 @@ impl ContextManager {
             );
         }
 
-        let system_prompt =
-            self.build_system_prompt_with_memory(recalled_memory, caller_user_id, caller_guild_id);
+        let channel_id = session.key.channel_id.get().to_string();
+        let system_prompt = self.build_system_prompt_with_memory(
+            recalled_memory,
+            caller_user_id,
+            caller_guild_id,
+            &channel_id,
+        );
 
         Context {
             system_prompt,
@@ -70,16 +75,13 @@ impl ContextManager {
         recalled: &RecalledMemory,
         caller_user_id: Option<String>,
         caller_guild_id: Option<u64>,
+        channel_id: &str,
     ) -> String {
         let user_id = caller_user_id.unwrap_or_else(|| "unknown".to_string());
         let guild_id = caller_guild_id
             .map(|id| id.to_string())
             .unwrap_or_else(|| "unknown".to_string());
-        let channel_id = recalled
-            .mid_term
-            .first()
-            .map(|_| "unknown".to_string())
-            .unwrap_or_else(|| "unknown".to_string());
+        let channel_id = channel_id.to_string();
 
         let base_system_prompt = self
             .base_system_prompt
