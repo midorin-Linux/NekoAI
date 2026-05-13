@@ -1,12 +1,238 @@
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use colored::Colorize;
-use dialoguer::{Confirm, Input, Select, theme::SimpleTheme};
+use dialoguer::{Confirm, Input, Password, Select, theme::SimpleTheme};
 use nekoai_config::loader::{
-    ChatPlatform, Config, ConversationModel, Discord, EmbeddingModel, Memory, Provider, SecretKey,
-    SummarizerModel, ToolPermissions, VectorDb,
+    ChatPlatform, Config, ConversationModel, Discord, EmbeddingModel, Memory, Parameters, Provider,
+    SecretKey, SummarizerModel, ToolPermissions, VectorDb,
 };
 
-const EMBED_OPTIONS: &[(&str, u64)] = &[("Custom", 1536)];
+// ── Provider Presets ──────────────────────────────────────────────────────────
+
+struct ProviderPreset {
+    label: &'static str,
+    base_url: &'static str,
+    default_model: &'static str,
+    default_summarizer: &'static str,
+}
+
+const PROVIDER_PRESETS: &[ProviderPreset] = &[
+    ProviderPreset {
+        label: "OpenAI",
+        base_url: "https://api.openai.com/v1",
+        default_model: "gpt-4o",
+        default_summarizer: "gpt-4o-mini",
+    },
+    ProviderPreset {
+        label: "Anthropic",
+        base_url: "https://api.anthropic.com/v1",
+        default_model: "claude-sonnet-4-20250514",
+        default_summarizer: "claude-haiku-3-5-20241022",
+    },
+    ProviderPreset {
+        label: "Ollama (Local)",
+        base_url: "http://localhost:11434/v1",
+        default_model: "llama3.1",
+        default_summarizer: "llama3.1",
+    },
+    ProviderPreset {
+        label: "Custom",
+        base_url: "",
+        default_model: "",
+        default_summarizer: "",
+    },
+];
+
+// ── Embedding Presets ─────────────────────────────────────────────────────────
+
+struct EmbeddingPreset {
+    label: &'static str,
+    model_name: &'static str,
+    dimension: u64,
+}
+
+const EMBEDDING_PRESETS: &[EmbeddingPreset] = &[
+    EmbeddingPreset {
+        label: "text-embedding-3-small (OpenAI, 1536d)",
+        model_name: "text-embedding-3-small",
+        dimension: 1536,
+    },
+    EmbeddingPreset {
+        label: "text-embedding-3-large (OpenAI, 3072d)",
+        model_name: "text-embedding-3-large",
+        dimension: 3072,
+    },
+    EmbeddingPreset {
+        label: "text-embedding-ada-002 (OpenAI, 1536d)",
+        model_name: "text-embedding-ada-002",
+        dimension: 1536,
+    },
+    EmbeddingPreset {
+        label: "Custom",
+        model_name: "",
+        dimension: 0,
+    },
+];
+
+// ── Validation & Input Helpers ───────────────────────────────────────────────
+
+/// Prompt for input with validation in a loop until valid input is provided.
+fn validated_input<V>(prompt: &str, default: Option<String>, validate: V) -> Result<String>
+where
+    V: Fn(&str) -> Result<(), String>,
+{
+    loop {
+        let mut input_builder = Input::with_theme(&SimpleTheme).with_prompt(prompt);
+        if let Some(ref default_val) = default {
+            input_builder = input_builder.with_initial_text(default_val.clone());
+        }
+        let value: String = input_builder.interact_text()?;
+        match validate(&value) {
+            Ok(()) => return Ok(value),
+            Err(msg) => {
+                println!("  {} {}\n", "✗".red(), msg.red());
+            }
+        }
+    }
+}
+
+/// Prompt for a password with validation in a loop.
+fn validated_password<V>(prompt: &str, validate: V) -> Result<String>
+where
+    V: Fn(&str) -> Result<(), String>,
+{
+    loop {
+        let value = Password::with_theme(&SimpleTheme)
+            .with_prompt(prompt)
+            .interact()?;
+        match validate(&value) {
+            Ok(()) => return Ok(value),
+            Err(msg) => {
+                println!("  {} {}\n", "✗".red(), msg.red());
+            }
+        }
+    }
+}
+
+// ── Validation Functions ──────────────────────────────────────────────────────
+
+fn validate_discord_token(s: &str) -> Result<(), String> {
+    if s.is_empty() {
+        return Err("Token cannot be empty".to_string());
+    }
+    if s.len() < 50 {
+        return Err(
+            "Token is too short — Discord bot tokens are typically 50+ characters".to_string(),
+        );
+    }
+    if !s
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-')
+    {
+        return Err(
+            "Token contains invalid characters — only alphanumeric, '.', '_', and '-' are allowed"
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
+fn validate_url(s: &str) -> Result<(), String> {
+    if !s.starts_with("http://") && !s.starts_with("https://") {
+        return Err("URL must start with http:// or https://".to_string());
+    }
+    if s.len() < 10 {
+        return Err("URL is too short".to_string());
+    }
+    Ok(())
+}
+
+fn validate_api_key(s: &str) -> Result<(), String> {
+    if s.is_empty() {
+        return Err("API Key cannot be empty".to_string());
+    }
+    Ok(())
+}
+
+fn validate_guild_id(s: &str) -> Result<(), String> {
+    if s.is_empty() {
+        return Ok(()); // empty means use default (0)
+    }
+    match s.parse::<u64>() {
+        Ok(_) => Ok(()),
+        Err(_) => Err("Guild ID must be a number (e.g., 123456789012345678)".to_string()),
+    }
+}
+
+fn validate_dimension(s: &str) -> Result<(), String> {
+    match s.parse::<u64>() {
+        Ok(n) if n > 0 => Ok(()),
+        Ok(_) => Err("Dimension must be a positive number".to_string()),
+        Err(_) => Err("Dimension must be a positive number (e.g., 1536)".to_string()),
+    }
+}
+
+fn validate_positive_number(s: &str) -> Result<(), String> {
+    match s.parse::<u64>() {
+        Ok(n) if n > 0 => Ok(()),
+        Ok(_) => Err("Value must be a positive number".to_string()),
+        Err(_) => Err("Value must be a positive number".to_string()),
+    }
+}
+
+fn validate_temperature(s: &str) -> Result<(), String> {
+    match s.parse::<f64>() {
+        Ok(n) if (0.0 ..= 2.0).contains(&n) => Ok(()),
+        Ok(_) => Err("Temperature must be between 0.0 and 2.0".to_string()),
+        Err(_) => Err("Temperature must be a decimal number (e.g., 1.0)".to_string()),
+    }
+}
+
+fn validate_top_p(s: &str) -> Result<(), String> {
+    match s.parse::<f64>() {
+        Ok(n) if (0.0 ..= 1.0).contains(&n) => Ok(()),
+        Ok(_) => Err("Top P must be between 0.0 and 1.0".to_string()),
+        Err(_) => Err("Top P must be a decimal number (e.g., 0.95)".to_string()),
+    }
+}
+
+/// Prompt for a full set of model parameters (max_token, temperature, top_p)
+/// using the given `defaults` and displaying the section `label`.
+fn input_model_params(label: &str, defaults: &Parameters) -> Result<Parameters> {
+    let max_token_str = validated_input(
+        &format!("  Max tokens ({label})"),
+        Some(defaults.max_token.to_string()),
+        validate_positive_number,
+    )?;
+    let max_token: u64 = max_token_str.parse().unwrap_or(defaults.max_token);
+
+    println!();
+
+    let temperature = validated_input(
+        &format!("  Temperature (0.0 ~ 2.0; higher = more creative) ({label})"),
+        Some(defaults.temperature.to_string()),
+        validate_temperature,
+    )?;
+    let temperature: f64 = temperature.parse().unwrap_or(defaults.temperature);
+
+    println!();
+
+    let top_p = validated_input(
+        &format!("  Top P (0.0 ~ 1.0; nucleus sampling) ({label})"),
+        Some(defaults.top_p.to_string()),
+        validate_top_p,
+    )?;
+    let top_p: f64 = top_p.parse().unwrap_or(defaults.top_p);
+
+    println!();
+
+    Ok(Parameters {
+        max_token,
+        temperature,
+        top_p,
+    })
+}
+
+// ── Display Helpers ───────────────────────────────────────────────────────────
 
 fn print_header(step: usize, total: usize, title: &str) {
     println!();
@@ -24,93 +250,164 @@ fn print_footer() {
     println!("  {}", "[Enter: next]  [Esc/Ctrl+C: exit]".dimmed());
 }
 
-/// Run all 4 steps of the setup wizard and return a complete Config.
-pub fn run_wizard() -> Result<Config> {
-    // ── Step 1: Discord Token ──────────────────────────────────
-    print_header(1, 4, "Discord Bot Token");
-    println!("  Enter your Discord Bot Token:");
-    println!(
-        "  {}",
-        "  Create a Bot on the Discord Developer Portal and paste the token here.".dimmed()
-    );
+fn print_subheader(text: &str) {
+    println!("  {}", text.dimmed());
     println!();
-    let token: String = Input::with_theme(&SimpleTheme)
-        .with_prompt("  Bot Token")
-        .interact_text()?;
-    print_footer();
+}
 
-    // ── Step 2: AI Provider (Custom only) ─────────────────────
-    print_header(2, 4, "AI Provider");
-    println!("  Enter the API endpoint details for your AI provider:");
-    println!();
-    let base_url: String = Input::with_theme(&SimpleTheme)
-        .with_prompt("  Base URL")
-        .interact_text()?;
-    println!();
-    let api_key: String = Input::with_theme(&SimpleTheme)
-        .with_prompt("  API Key")
-        .interact_text()?;
-    print_footer();
+// ── Step 1: Discord ──────────────────────────────────────────────────────────
 
-    // ── Step 3: Model Selection ────────────────────────────────
-    print_header(3, 4, "Model Selection");
-    println!("  Enter the AI model names to use:");
-    println!(
-        "  {}",
-        "  The conversation model handles user interactions.".dimmed()
+fn step_discord() -> Result<(String, u64)> {
+    print_header(1, 5, "Discord Bot Configuration");
+    println!("  Enter your Discord Bot Token and Guild ID.");
+    print_subheader("Create a Bot on the Discord Developer Portal and invite it to your server.");
+
+    let token = validated_password("  Bot Token", validate_discord_token)?;
+    println!();
+
+    let guild_id_str = validated_input(
+        "  Guild / Server ID (optional — leave empty for single-server mode)",
+        None,
+        validate_guild_id,
+    )?;
+
+    let guild_id: u64 = guild_id_str.parse().unwrap_or(0);
+    print_footer();
+    Ok((token, guild_id))
+}
+
+// ── Step 2: AI Provider ──────────────────────────────────────────────────────
+
+fn step_provider() -> Result<(String, String, String, String)> {
+    print_header(2, 5, "AI Provider");
+    println!("  Select your AI provider and enter the API credentials.");
+    print_subheader(
+        "The provider handles all model inference including conversation, summarization, and embedding.",
     );
+
+    let provider_labels: Vec<&str> = PROVIDER_PRESETS.iter().map(|p| p.label).collect();
+    let selection = Select::with_theme(&SimpleTheme)
+        .with_prompt("  Provider")
+        .items(&provider_labels)
+        .default(0)
+        .interact()?;
+
+    let preset = &PROVIDER_PRESETS[selection];
+    println!();
+
+    let base_url = validated_input(
+        "  Base URL",
+        Some(preset.base_url.to_string()),
+        validate_url,
+    )?;
+
+    println!();
+
+    let api_key = validated_password("  API Key", validate_api_key)?;
+
+    print_footer();
+    Ok((
+        preset.default_model.to_string(),
+        preset.default_summarizer.to_string(),
+        base_url,
+        api_key,
+    ))
+}
+
+// ── Step 3: Model Selection ──────────────────────────────────────────────────
+
+fn step_models(
+    default_model: &str,
+    default_summarizer: &str,
+) -> Result<(String, String, String, u64)> {
+    print_header(3, 5, "Model Selection");
+    println!("  Choose the AI models for conversation, summarization, and embedding.");
     println!(
         "  {}",
-        "  The summarizer model (can be a cheaper/faster one) handles memory summarization."
+        "  The conversation model handles user interactions. The summarizer model (can be a cheaper/faster one) handles memory summarization."
             .dimmed()
     );
     println!();
-    let model_name: String = Input::with_theme(&SimpleTheme)
-        .with_prompt("  Conversation model name")
-        .interact_text()?;
+
+    let default_model_display = if default_model.is_empty() {
+        "gpt-4o".to_string()
+    } else {
+        default_model.to_string()
+    };
+
+    let model_name = validated_input(
+        "  Conversation model name",
+        Some(default_model_display),
+        |_| Ok(()),
+    )?;
+
     println!();
-    let summarizer_model_name: String = Input::with_theme(&SimpleTheme)
-        .with_prompt("  Summarizer model name")
-        .with_initial_text(model_name.clone())
-        .interact_text()?;
+
+    let default_summarizer_display = if default_summarizer.is_empty() {
+        model_name.clone()
+    } else {
+        default_summarizer.to_string()
+    };
+
+    let summarizer_input = validated_input(
+        "  Summarizer model name (press Enter to use the same as the conversation model)",
+        Some(default_summarizer_display),
+        |_| Ok(()),
+    )?;
+
+    let summarizer_model_name = if summarizer_input.is_empty() {
+        model_name.clone()
+    } else {
+        summarizer_input
+    };
+
     println!();
     println!("  Select an embedding model for vector search (long-term & mid-term memory):");
     println!();
-    let embed_labels: Vec<&str> = EMBED_OPTIONS.iter().map(|(n, _)| *n).collect();
+
+    let embed_labels: Vec<&str> = EMBEDDING_PRESETS.iter().map(|p| p.label).collect();
     let embed_idx = Select::with_theme(&SimpleTheme)
         .with_prompt("  Embedding model")
         .items(&embed_labels)
         .default(0)
         .interact()?;
 
-    let (embed_model_name, embed_dimension) = if embed_idx == EMBED_OPTIONS.len() - 1 {
-        // "Custom" option selected
-        println!();
-        let name: String = Input::with_theme(&SimpleTheme)
-            .with_prompt("  Embedding model name")
-            .interact_text()?;
-        let dim: String = Input::with_theme(&SimpleTheme)
-            .with_prompt("  Embedding dimension")
-            .default("1536".to_string())
-            .interact_text()?;
-        let dim: u64 = dim
-            .parse()
-            .map_err(|_| anyhow::anyhow!("Invalid dimension"))?;
-        (name, dim)
-    } else {
-        let (name, dim) = EMBED_OPTIONS[embed_idx];
-        (name.to_string(), dim)
+    let (embed_model_name, embed_dimension) = {
+        let preset = &EMBEDDING_PRESETS[embed_idx];
+        if preset.model_name.is_empty() {
+            // "Custom" option selected
+            println!();
+            let name = validated_input("  Embedding model name", None, |_| Ok(()))?;
+            let dim = validated_input(
+                "  Embedding dimension",
+                Some("1536".to_string()),
+                validate_dimension,
+            )?;
+            let dim: u64 = dim
+                .parse()
+                .context("Invalid dimension — expected a positive integer")?;
+            (name, dim)
+        } else {
+            (preset.model_name.to_string(), preset.dimension)
+        }
     };
-    print_footer();
 
-    // ── Step 4: Tool Permissions ──────────────────────────────
-    print_header(4, 4, "Tool Permissions");
+    print_footer();
+    Ok((
+        model_name,
+        summarizer_model_name,
+        embed_model_name,
+        embed_dimension,
+    ))
+}
+
+// ── Step 4: Tool Permissions ─────────────────────────────────────────────────
+
+fn step_tools() -> Result<(bool, bool)> {
+    print_header(4, 5, "Tool Permissions");
     println!("  Enable the tools you want the agent to use:");
-    println!(
-        "  {}",
-        "  You can change these later by editing the config file.".dimmed()
-    );
-    println!();
+    print_subheader("You can change these later by editing the config file.");
+
     let web_search = Confirm::with_theme(&SimpleTheme)
         .with_prompt("  Enable Web Search?")
         .default(false)
@@ -119,16 +416,164 @@ pub fn run_wizard() -> Result<Config> {
         .with_prompt("  Enable Code Execution?")
         .default(false)
         .interact()?;
-    print_footer();
 
-    // ── Summary & Confirm ─────────────────────────────────────
+    print_footer();
+    Ok((web_search, code_exec))
+}
+
+// ── Advanced Settings Data ───────────────────────────────────────────────────
+
+struct AdvancedConfig {
+    memory: Memory,
+    params: Parameters,
+    summarizer_params: Parameters,
+}
+
+// ── Step 5: Advanced Settings (Optional) ─────────────────────────────────────
+
+fn step_advanced() -> Result<AdvancedConfig> {
+    print_header(5, 5, "Advanced Settings");
+
+    let configure = Confirm::with_theme(&SimpleTheme)
+        .with_prompt("  Do you want to configure memory and model parameters?")
+        .default(false)
+        .interact()?;
+
+    if !configure {
+        println!(
+            "  {}",
+            "(Using default values for all advanced settings)".dimmed()
+        );
+        print_footer();
+        return Ok(AdvancedConfig {
+            memory: Memory::default(),
+            params: Parameters::default(),
+            summarizer_params: Parameters::default(),
+        });
+    }
+
     println!();
-    println!("  {}", "═══ Summary ═══".green().bold());
+    println!("  {}", "─── Memory Settings ───".bold());
+    println!();
+
+    let qdrant_url = validated_input(
+        "  Qdrant URL",
+        Some("http://localhost:6334".to_string()),
+        validate_url,
+    )?;
+
+    println!();
+
+    let qdrant_api_key: String = Input::with_theme(&SimpleTheme)
+        .with_prompt("  Qdrant API Key (leave empty if not required)")
+        .interact_text()?;
+
+    let qdrant_api_key = if qdrant_api_key.is_empty() {
+        None
+    } else {
+        Some(qdrant_api_key)
+    };
+
+    println!();
+
+    let short_term_max = validated_input(
+        "  Short-term memory max entries",
+        Some("20".to_string()),
+        validate_positive_number,
+    )?;
+    let short_term_max_entries: usize = short_term_max.parse().unwrap_or(20);
+
+    println!();
+
+    let mid_term_top_k_str = validated_input(
+        "  Mid-term memory top-K results",
+        Some("3".to_string()),
+        validate_positive_number,
+    )?;
+    let mid_term_top_k: usize = mid_term_top_k_str.parse().unwrap_or(3);
+
+    println!();
+
+    let long_term_top_k_str = validated_input(
+        "  Long-term memory top-K results",
+        Some("5".to_string()),
+        validate_positive_number,
+    )?;
+    let long_term_top_k: usize = long_term_top_k_str.parse().unwrap_or(5);
+
+    println!();
+
+    let retention_days_str = validated_input(
+        "  Mid-term memory retention (days)",
+        Some("30".to_string()),
+        validate_positive_number,
+    )?;
+    let mid_term_retention_days: u32 = retention_days_str.parse().unwrap_or(30);
+
+    println!();
+    println!("  {}", "─── Model Parameters ───".bold());
     println!();
     println!(
-        "  Discord Token  : {}",
-        "*".repeat(token.len().saturating_sub(4)) + &token[token.len().saturating_sub(4) ..]
+        "  {}",
+        "These settings affect the behavior of the conversation and summarizer models.".dimmed()
     );
+    println!();
+
+    let params = input_model_params("conversation model", &Parameters::default())?;
+
+    println!("  {}", "─── Summarizer Model Parameters ───".bold());
+    println!();
+
+    let summarizer_params = input_model_params("summarizer model", &Parameters::default())?;
+
+    let memory = Memory {
+        vector_db: VectorDb {
+            url: qdrant_url,
+            api_key: qdrant_api_key,
+            ..Default::default()
+        },
+        short_term_max_entries,
+        mid_term_top_k,
+        long_term_top_k,
+        mid_term_retention_days,
+    };
+
+    print_footer();
+    Ok(AdvancedConfig {
+        memory,
+        params,
+        summarizer_params,
+    })
+}
+
+// ── Summary ──────────────────────────────────────────────────────────────────
+
+#[allow(clippy::too_many_arguments)]
+fn print_summary(
+    token_len: usize,
+    base_url: &str,
+    model_name: &str,
+    summarizer_model_name: &str,
+    embed_model_name: &str,
+    embed_dimension: u64,
+    web_search: bool,
+    code_exec: bool,
+    guild_id: u64,
+    advanced: &AdvancedConfig,
+) {
+    println!();
+    println!("  {}", "═══ Configuration Summary ═══".green().bold());
+    println!();
+
+    println!("  Discord Token  : {}", "*".repeat(4.min(token_len)));
+    if guild_id != 0 {
+        println!("  Guild ID        : {}", guild_id);
+    } else {
+        println!(
+            "  Guild ID        : {}",
+            "(not set / single-server mode)".dimmed()
+        );
+    }
     println!("  Base URL        : {}", base_url);
     println!("  Conversation    : {}", model_name);
     println!("  Summarizer      : {}", summarizer_model_name);
@@ -137,7 +582,7 @@ pub fn run_wizard() -> Result<Config> {
         embed_model_name, embed_dimension
     );
     println!(
-        "  Web Search     : {}",
+        "  Web Search      : {}",
         if web_search {
             "✓ enabled".green()
         } else {
@@ -145,14 +590,71 @@ pub fn run_wizard() -> Result<Config> {
         }
     );
     println!(
-        "  Code Execution : {}",
+        "  Code Execution  : {}",
         if code_exec {
             "✓ enabled".green()
         } else {
             "✗ disabled".red()
         }
     );
+    // Advanced settings
+    let m = &advanced.memory;
     println!();
+    println!("  {}", "─── Memory ───".dimmed());
+    println!("  Qdrant URL      : {}", m.vector_db.url);
+    println!("  Short-term max  : {}", m.short_term_max_entries);
+    println!("  Mid-term top-K  : {}", m.mid_term_top_k);
+    println!("  Long-term top-K : {}", m.long_term_top_k);
+    println!("  Retention (days): {}", m.mid_term_retention_days);
+
+    let p = &advanced.params;
+    println!();
+    println!("  {}", "─── Conversation Parameters ───".dimmed());
+    println!("  Max tokens      : {}", p.max_token);
+    println!("  Temperature     : {:.2}", p.temperature);
+    println!("  Top P           : {:.2}", p.top_p);
+
+    let sp = &advanced.summarizer_params;
+    println!("  {}", "─── Summarizer Parameters ───".dimmed());
+    println!("  Max tokens      : {}", sp.max_token);
+    println!("  Temperature     : {:.2}", sp.temperature);
+    println!("  Top P           : {:.2}", sp.top_p);
+    println!();
+}
+
+// ── Main Wizard Orchestrator ─────────────────────────────────────────────────
+
+/// Run all 5 steps of the setup wizard and return a complete Config.
+pub fn run_wizard() -> Result<Config> {
+    // ── Step 1: Discord ──────────────────────────────────────
+    let (token, guild_id) = step_discord()?;
+
+    // ── Step 2: AI Provider ──────────────────────────────────
+    let (default_model, default_summarizer, base_url, api_key) = step_provider()?;
+
+    // ── Step 3: Model Selection ──────────────────────────────
+    let (model_name, summarizer_model_name, embed_model_name, embed_dimension) =
+        step_models(&default_model, &default_summarizer)?;
+
+    // ── Step 4: Tool Permissions ─────────────────────────────
+    let (web_search, code_exec) = step_tools()?;
+
+    // ── Step 5: Advanced Settings ────────────────────────────
+    let advanced = step_advanced()?;
+
+    // ── Summary & Confirm ────────────────────────────────────
+    print_summary(
+        token.len(),
+        &base_url,
+        &model_name,
+        &summarizer_model_name,
+        &embed_model_name,
+        embed_dimension,
+        web_search,
+        code_exec,
+        guild_id,
+        &advanced,
+    );
 
     let confirmed = Confirm::with_theme(&SimpleTheme)
         .with_prompt("  Save this configuration?")
@@ -163,25 +665,26 @@ pub fn run_wizard() -> Result<Config> {
         bail!("setup cancelled by user");
     }
 
-    // ── Build Config ──────────────────────────────────────────
+    // ── Build Config ─────────────────────────────────────────
+    // Reorder to minimize clones: fields used last get the move instead of clone
     let config = Config {
         chat_platform: ChatPlatform::Discord,
         discord: Discord {
             token: SecretKey::new(token),
-            guild_id: 0,
+            guild_id,
         },
         provider: Provider {
             conversation_model: ConversationModel {
                 provider_base_url: base_url.clone(),
                 api_key: SecretKey::new(api_key.clone()),
-                model_name: model_name.clone(),
-                parameters: Default::default(),
+                model_name,
+                parameters: advanced.params,
             },
             summarizer_model: SummarizerModel {
                 provider_base_url: base_url.clone(),
-                api_key: SecretKey::new(api_key.clone()),
+                api_key: SecretKey::new(api_key),
                 model_name: summarizer_model_name,
-                parameters: Default::default(),
+                parameters: advanced.summarizer_params,
             },
             embedding_model: EmbeddingModel {
                 provider_base_url: base_url,
@@ -190,13 +693,7 @@ pub fn run_wizard() -> Result<Config> {
                 dimension: embed_dimension,
             },
         },
-        memory: Memory {
-            vector_db: VectorDb::default(),
-            short_term_max_entries: 20,
-            mid_term_top_k: 3,
-            long_term_top_k: 5,
-            mid_term_retention_days: 30,
-        },
+        memory: advanced.memory,
         tools: ToolPermissions {
             web_search,
             code_exec,

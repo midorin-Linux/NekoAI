@@ -32,9 +32,15 @@ fn cli() -> Command {
                         .num_args(1),
                 )
                 .arg(
+                    clap::Arg::new("api-key")
+                        .long("api-key")
+                        .help("API key for the AI provider (used with --skip-setup)")
+                        .num_args(1),
+                )
+                .arg(
                     clap::Arg::new("provider")
                         .long("provider")
-                        .help("AI provider (anthropic, openai, custom; used with --skip-setup)")
+                        .help("AI provider (openai, anthropic, ollama, custom; used with --skip-setup)")
                         .num_args(1),
                 )
                 .arg(
@@ -42,6 +48,30 @@ fn cli() -> Command {
                         .long("model")
                         .help("Model name (used with --skip-setup)")
                         .num_args(1),
+                )
+                .arg(
+                    clap::Arg::new("base-url")
+                        .long("base-url")
+                        .help("Base URL for the AI provider API (used with --skip-setup)")
+                        .num_args(1),
+                )
+                .arg(
+                    clap::Arg::new("guild-id")
+                        .long("guild-id")
+                        .help("Discord Guild/Server ID (used with --skip-setup)")
+                        .num_args(1),
+                )
+                .arg(
+                    clap::Arg::new("web-search")
+                        .long("web-search")
+                        .help("Enable web search tool (used with --skip-setup)")
+                        .action(clap::ArgAction::SetTrue),
+                )
+                .arg(
+                    clap::Arg::new("code-exec")
+                        .long("code-exec")
+                        .help("Enable code execution tool (used with --skip-setup)")
+                        .action(clap::ArgAction::SetTrue),
                 ),
         )
 }

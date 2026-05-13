@@ -50,19 +50,32 @@ fn merge_with_existing(new_config: &Config) -> Result<Config> {
 
     let mut merged = new_config.clone();
 
-    // Discord: keep existing token if it's not a placeholder
+    merge_discord(&mut merged, &existing);
+    merge_provider(&mut merged, &existing);
+    merge_memory(&mut merged, &existing);
+    merge_tools(&mut merged, &existing);
+
+    warn!("existing config values were preserved where present");
+    Ok(merged)
+}
+
+/// Keep the existing Discord settings if they are not placeholders.
+fn merge_discord(merged: &mut Config, existing: &Config) {
     if !is_placeholder(existing.discord.token.expose()) {
-        merged.discord.token = existing.discord.token;
+        merged.discord.token = existing.discord.token.clone();
     }
     if existing.discord.guild_id != 0 {
         merged.discord.guild_id = existing.discord.guild_id;
     }
+}
 
-    // Provider (language model): keep existing API key if not placeholder
+/// Keep the existing provider settings if they are not defaults/placeholders.
+fn merge_provider(merged: &mut Config, existing: &Config) {
+    // ── Conversation model ──────────────────────────────────
     if !is_placeholder(existing.provider.conversation_model.api_key.expose()) {
-        merged.provider.conversation_model.api_key = existing.provider.conversation_model.api_key;
+        merged.provider.conversation_model.api_key =
+            existing.provider.conversation_model.api_key.clone();
     }
-    // Keep existing model name and base URL if they differ from defaults
     if !existing.provider.conversation_model.model_name.is_empty() {
         merged.provider.conversation_model.model_name =
             existing.provider.conversation_model.model_name.clone();
@@ -79,10 +92,15 @@ fn merge_with_existing(new_config: &Config) -> Result<Config> {
             .provider_base_url
             .clone();
     }
+    merge_parameters(
+        &mut merged.provider.conversation_model.parameters,
+        &existing.provider.conversation_model.parameters,
+    );
 
-    // Provider (summarizer model): keep existing API key if not placeholder
+    // ── Summarizer model ────────────────────────────────────
     if !is_placeholder(existing.provider.summarizer_model.api_key.expose()) {
-        merged.provider.summarizer_model.api_key = existing.provider.summarizer_model.api_key;
+        merged.provider.summarizer_model.api_key =
+            existing.provider.summarizer_model.api_key.clone();
     }
     if !existing.provider.summarizer_model.model_name.is_empty() {
         merged.provider.summarizer_model.model_name =
@@ -97,29 +115,14 @@ fn merge_with_existing(new_config: &Config) -> Result<Config> {
         merged.provider.summarizer_model.provider_base_url =
             existing.provider.summarizer_model.provider_base_url.clone();
     }
-    if existing
-        .provider
-        .summarizer_model
-        .parameters
-        .max_token
-        .abs_diff(262144)
-        > 1
-    {
-        merged.provider.summarizer_model.parameters.max_token =
-            existing.provider.summarizer_model.parameters.max_token;
-    }
-    if (existing.provider.summarizer_model.parameters.temperature - 1.0).abs() > 0.01 {
-        merged.provider.summarizer_model.parameters.temperature =
-            existing.provider.summarizer_model.parameters.temperature;
-    }
-    if (existing.provider.summarizer_model.parameters.top_p - 0.95).abs() > 0.01 {
-        merged.provider.summarizer_model.parameters.top_p =
-            existing.provider.summarizer_model.parameters.top_p;
-    }
+    merge_parameters(
+        &mut merged.provider.summarizer_model.parameters,
+        &existing.provider.summarizer_model.parameters,
+    );
 
-    // Provider (embedding model): keep existing API key if not placeholder
+    // ── Embedding model ─────────────────────────────────────
     if !is_placeholder(existing.provider.embedding_model.api_key.expose()) {
-        merged.provider.embedding_model.api_key = existing.provider.embedding_model.api_key;
+        merged.provider.embedding_model.api_key = existing.provider.embedding_model.api_key.clone();
     }
     if !existing.provider.embedding_model.model_name.is_empty() {
         merged.provider.embedding_model.model_name =
@@ -137,29 +140,26 @@ fn merge_with_existing(new_config: &Config) -> Result<Config> {
     if existing.provider.embedding_model.dimension != 0 {
         merged.provider.embedding_model.dimension = existing.provider.embedding_model.dimension;
     }
+}
 
-    // Parameters: keep existing if they differ from CLI defaults
-    if existing
-        .provider
-        .conversation_model
-        .parameters
-        .max_token
-        .abs_diff(262144)
-        > 1
-    {
-        merged.provider.conversation_model.parameters.max_token =
-            existing.provider.conversation_model.parameters.max_token;
+/// Merge Parameters, preserving values that differ from CLI defaults.
+fn merge_parameters(
+    merged_params: &mut nekoai_config::loader::Parameters,
+    existing: &nekoai_config::loader::Parameters,
+) {
+    if existing.max_token.abs_diff(262144) > 0 {
+        merged_params.max_token = existing.max_token;
     }
-    if (existing.provider.conversation_model.parameters.temperature - 1.0).abs() > 0.01 {
-        merged.provider.conversation_model.parameters.temperature =
-            existing.provider.conversation_model.parameters.temperature;
+    if (existing.temperature - 1.0).abs() > 0.01 {
+        merged_params.temperature = existing.temperature;
     }
-    if (existing.provider.conversation_model.parameters.top_p - 0.95).abs() > 0.01 {
-        merged.provider.conversation_model.parameters.top_p =
-            existing.provider.conversation_model.parameters.top_p;
+    if (existing.top_p - 0.95).abs() > 0.01 {
+        merged_params.top_p = existing.top_p;
     }
+}
 
-    // Memory settings: keep existing if they differ from defaults
+/// Keep the existing memory settings if they differ from defaults.
+fn merge_memory(merged: &mut Config, existing: &Config) {
     if existing.memory.short_term_max_entries != 20 {
         merged.memory.short_term_max_entries = existing.memory.short_term_max_entries;
     }
@@ -172,7 +172,7 @@ fn merge_with_existing(new_config: &Config) -> Result<Config> {
     if existing.memory.mid_term_retention_days != 30 {
         merged.memory.mid_term_retention_days = existing.memory.mid_term_retention_days;
     }
-    // Vector DB: keep existing if set
+    // Vector DB
     if !existing.memory.vector_db.url.is_empty()
         && existing.memory.vector_db.url != "http://localhost:6334"
     {
@@ -181,12 +181,11 @@ fn merge_with_existing(new_config: &Config) -> Result<Config> {
     if existing.memory.vector_db.api_key.is_some() {
         merged.memory.vector_db.api_key = existing.memory.vector_db.api_key.clone();
     }
+}
 
-    // Tools: keep existing
+/// Keep the existing tool permissions.
+fn merge_tools(merged: &mut Config, existing: &Config) {
     merged.tools = existing.tools.clone();
-
-    warn!("existing config values were preserved where present");
-    Ok(merged)
 }
 
 /// Check if a string looks like a placeholder (e.g. "YOUR_..." or empty).

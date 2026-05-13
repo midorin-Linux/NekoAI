@@ -135,6 +135,11 @@ impl StartCommand {
                         bail!("--token is required when using --skip-setup");
                     }
 
+                    let api_key = sub_matches
+                        .get_one::<String>("api-key")
+                        .cloned()
+                        .unwrap_or_default();
+
                     let provider = sub_matches
                         .get_one::<String>("provider")
                         .cloned()
@@ -145,7 +150,24 @@ impl StartCommand {
                         .cloned()
                         .unwrap_or_default();
 
-                    let cfg = nekoai_setup::cli_fallback::make_config(&token, &provider, &model);
+                    let base_url = sub_matches
+                        .get_one::<String>("base-url")
+                        .cloned()
+                        .unwrap_or_default();
+
+                    let guild_id = sub_matches
+                        .get_one::<String>("guild-id")
+                        .cloned()
+                        .and_then(|s| s.parse::<u64>().ok())
+                        .unwrap_or(0);
+
+                    let web_search = sub_matches.get_flag("web-search");
+                    let code_exec = sub_matches.get_flag("code-exec");
+
+                    let cfg = nekoai_setup::cli_fallback::make_config(
+                        &token, &api_key, &provider, &model, &base_url, guild_id, web_search,
+                        code_exec,
+                    );
                     info!(
                         "configuration built from CLI arguments (provider: {}, model: {})",
                         if provider.is_empty() {

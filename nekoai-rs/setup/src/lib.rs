@@ -27,7 +27,9 @@ pub fn has_env_token() -> bool {
 /// Other fields will use sensible defaults.
 pub fn config_from_env() -> Option<Config> {
     let token = std::env::var("DISCORD_AGENT_TOKEN").ok()?;
-    Some(cli_fallback::make_config(&token, "", ""))
+    Some(cli_fallback::make_config(
+        &token, "", "", "", "", 0, false, false,
+    ))
 }
 
 /// Check if a configuration file already exists at the expected path.
