@@ -551,7 +551,7 @@ fn step_advanced() -> Result<AdvancedConfig> {
 #[allow(clippy::too_many_arguments)]
 fn print_summary(
     token_len: usize,
-    base_url: &str,
+    _base_url: &str,
     model_name: &str,
     summarizer_model_name: &str,
     embed_model_name: &str,
@@ -574,7 +574,7 @@ fn print_summary(
             "(not set / single-server mode)".dimmed()
         );
     }
-    println!("  Base URL        : {}", base_url);
+    println!("  Base URL        : {}", "(redacted)".dimmed());
     println!("  Conversation    : {}", model_name);
     println!("  Summarizer      : {}", summarizer_model_name);
     println!(
