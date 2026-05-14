@@ -403,7 +403,7 @@ fn step_models(
 
 // ── Step 4: Tool Permissions ─────────────────────────────────────────────────
 
-fn step_tools() -> Result<(bool, bool)> {
+fn step_tools() -> Result<bool> {
     print_header(4, 5, "Tool Permissions");
     println!("  Enable the tools you want the agent to use:");
     print_subheader("You can change these later by editing the config file.");
@@ -412,13 +412,9 @@ fn step_tools() -> Result<(bool, bool)> {
         .with_prompt("  Enable Web Search?")
         .default(false)
         .interact()?;
-    let code_exec = Confirm::with_theme(&SimpleTheme)
-        .with_prompt("  Enable Code Execution?")
-        .default(false)
-        .interact()?;
 
     print_footer();
-    Ok((web_search, code_exec))
+    Ok(web_search)
 }
 
 // ── Advanced Settings Data ───────────────────────────────────────────────────
@@ -518,6 +514,15 @@ fn step_advanced() -> Result<AdvancedConfig> {
     let mid_term_retention_days: u32 = retention_days_str.parse().unwrap_or(30);
 
     println!();
+
+    let long_term_interval_str = validated_input(
+        "  Long-term memory extraction interval (messages)",
+        Some("10".to_string()),
+        validate_positive_number,
+    )?;
+    let long_term_extraction_interval: usize = long_term_interval_str.parse().unwrap_or(10);
+
+    println!();
     println!("  {}", "─── Model Parameters ───".bold());
     println!();
     println!(
@@ -543,6 +548,7 @@ fn step_advanced() -> Result<AdvancedConfig> {
         mid_term_top_k,
         long_term_top_k,
         mid_term_retention_days,
+        long_term_extraction_interval,
     };
 
     print_footer();
@@ -564,7 +570,6 @@ fn print_summary(
     embed_model_name: &str,
     embed_dimension: u64,
     web_search: bool,
-    code_exec: bool,
     guild_id: u64,
     advanced: &AdvancedConfig,
 ) {
@@ -591,14 +596,6 @@ fn print_summary(
     println!(
         "  Web Search      : {}",
         if web_search {
-            "✓ enabled".green()
-        } else {
-            "✗ disabled".red()
-        }
-    );
-    println!(
-        "  Code Execution  : {}",
-        if code_exec {
             "✓ enabled".green()
         } else {
             "✗ disabled".red()
@@ -644,7 +641,7 @@ pub fn run_wizard() -> Result<Config> {
         step_models(&default_model, &default_summarizer)?;
 
     // ── Step 4: Tool Permissions ─────────────────────────────
-    let (web_search, code_exec) = step_tools()?;
+    let web_search = step_tools()?;
 
     // ── Step 5: Advanced Settings ────────────────────────────
     let advanced = step_advanced()?;
@@ -658,7 +655,6 @@ pub fn run_wizard() -> Result<Config> {
         &embed_model_name,
         embed_dimension,
         web_search,
-        code_exec,
         guild_id,
         &advanced,
     );
@@ -689,13 +685,13 @@ pub fn run_wizard() -> Result<Config> {
             },
             summarizer_model: SummarizerModel {
                 provider_base_url: base_url.clone(),
-                api_key: SecretKey::new(api_key),
+                api_key: SecretKey::new(api_key.clone()),
                 model_name: summarizer_model_name,
                 parameters: advanced.summarizer_params,
             },
             embedding_model: EmbeddingModel {
                 provider_base_url: base_url,
-                api_key: SecretKey::new("".to_string()),
+                api_key: SecretKey::new(api_key.clone()),
                 model_name: embed_model_name,
                 dimension: embed_dimension,
             },
@@ -703,7 +699,6 @@ pub fn run_wizard() -> Result<Config> {
         memory: advanced.memory,
         tools: ToolPermissions {
             web_search,
-            code_exec,
             searxng: Default::default(),
         },
     };

@@ -92,7 +92,6 @@ impl Tool for UpdateGuildSettings {
                     "guild_id": { "type": "integer" },
                     "name": { "type": "string" },
                     "description": { "type": "string" },
-                    "icon_path": { "type": "string" },
                     "clear_icon": { "type": "boolean" }
                 },
                 "required": ["guild_id"]
@@ -119,17 +118,8 @@ impl Tool for UpdateGuildSettings {
             changed = true;
         }
         if let Some(true) = get_bool(&args, "clear_icon") {
-            builder = builder.icon(None);
+            builder = builder.icon(None::<&CreateAttachment>);
             changed = true;
-        } else if let Some(icon_path) = get_string(&args, "icon_path") {
-            match std::fs::read(&icon_path) {
-                Ok(icon_data) => {
-                    let attachment = CreateAttachment::bytes(icon_data, "icon.png");
-                    builder = builder.icon(Some(&attachment));
-                    changed = true;
-                }
-                Err(error) => return Ok(err(format!("Failed to read icon file: {error}"))),
-            }
         }
 
         if !changed {

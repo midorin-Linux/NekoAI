@@ -172,6 +172,9 @@ fn merge_memory(merged: &mut Config, existing: &Config) {
     if existing.memory.mid_term_retention_days != 30 {
         merged.memory.mid_term_retention_days = existing.memory.mid_term_retention_days;
     }
+    if existing.memory.long_term_extraction_interval != 10 {
+        merged.memory.long_term_extraction_interval = existing.memory.long_term_extraction_interval;
+    }
     // Vector DB
     if !existing.memory.vector_db.url.is_empty()
         && existing.memory.vector_db.url != DEFAULT_QDRANT_URL

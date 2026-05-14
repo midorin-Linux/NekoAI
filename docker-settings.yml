@@ -5,5 +5,10 @@ server:
   base_url: "${SEARXNG_BASE_URL}"
   port: 8080
 
+search:
+  formats:
+    - html
+    - json
+
 redis:
   url: "${SEARXNG_REDIS_URL}"

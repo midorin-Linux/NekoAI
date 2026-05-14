@@ -15,7 +15,6 @@ pub fn make_config(
     base_url: &str,
     guild_id: u64,
     web_search: bool,
-    code_exec: bool,
 ) -> Config {
     let (provider_base_url, model_name) = resolve_provider(provider, model, base_url);
     let summarizer_model_name = resolve_summarizer(provider, &model_name);
@@ -49,7 +48,7 @@ pub fn make_config(
             },
             embedding_model: EmbeddingModel {
                 provider_base_url,
-                api_key: SecretKey::new("".to_owned()),
+                api_key: SecretKey::new(api_key.to_owned()),
                 model_name: "text-embedding-3-small".to_owned(),
                 dimension: 1536,
             },
@@ -60,10 +59,10 @@ pub fn make_config(
             mid_term_top_k: 3,
             long_term_top_k: 5,
             mid_term_retention_days: 30,
+            long_term_extraction_interval: 10,
         },
         tools: ToolPermissions {
             web_search,
-            code_exec,
             searxng: Default::default(),
         },
     }

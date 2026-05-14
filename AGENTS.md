@@ -21,6 +21,12 @@ NekoAIはRustで開発されているDiscord用AIエージェントです。Rig 
 - `.config/config.json`からの設定読み込み
 - Serialize/Deserialize の両方をサポート
 - SecretKey: 文字列出力時にマスク表示する安全なキー型
+- メモリ設定項目：
+  - `short_term_max_entries` (default: 20): 短期記憶の最大エントリ数
+  - `mid_term_top_k` (default: 3): 中期記憶検索時の上位K件
+  - `long_term_top_k` (default: 5): 長期記憶検索時の上位K件
+  - `mid_term_retention_days` (default: 30): 中期記憶の保持日数
+  - `long_term_extraction_interval` (default: 10): 長期記憶抽出を実行するメッセージ間隔
 
 ### discord (nekoai-discord)
 - SerenityによるDiscordイベント処理・コマンドルーティング
@@ -119,7 +125,9 @@ cargo clippy -- -D warnings  # リンター
 4. コンテキスト構築（短期記憶 + 想起した記憶）
 5. Rigエージェントで推論実行（ツール呼び出しを含む）
 6. 短期記憶に結果を保存
-7. 応答をDiscordに送信
+7. 会話を長期記憶抽出用バッファに蓄積
+8. 蓄積メッセージ数が `long_term_extraction_interval` に達した場合、バッチ抽出タスクを非同期で実行（複数ターンから複数の事実を抽出）
+9. 応答をDiscordに送信
 
 ## 拡張性
 

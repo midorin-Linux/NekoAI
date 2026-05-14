@@ -7,5 +7,6 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 config.workspace = true
+secrecy.workspace = true
 serde.workspace = true
 tracing.workspace = true

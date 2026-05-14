@@ -7,7 +7,6 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
-clap_derive.workspace = true
 nekoai-agent.workspace = true
 nekoai-config.workspace = true
 nekoai-discord.workspace = true

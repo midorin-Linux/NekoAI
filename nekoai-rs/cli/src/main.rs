@@ -28,13 +28,13 @@ fn cli() -> Command {
                 .arg(
                     clap::Arg::new("token")
                         .long("token")
-                        .help("Discord Bot Token (used with --skip-setup)")
+                        .help("Discord Bot Token (used with --skip-setup). ⚠️ PREFER the DISCORD_AGENT_TOKEN environment variable instead to avoid exposing secrets in process listings.")
                         .num_args(1),
                 )
                 .arg(
                     clap::Arg::new("api-key")
                         .long("api-key")
-                        .help("API key for the AI provider (used with --skip-setup)")
+                        .help("API key for the AI provider (used with --skip-setup). ⚠️ PREFER the NEKOAI_API_KEY environment variable instead to avoid exposing secrets in process listings.")
                         .num_args(1),
                 )
                 .arg(
@@ -65,12 +65,6 @@ fn cli() -> Command {
                     clap::Arg::new("web-search")
                         .long("web-search")
                         .help("Enable web search tool (used with --skip-setup)")
-                        .action(clap::ArgAction::SetTrue),
-                )
-                .arg(
-                    clap::Arg::new("code-exec")
-                        .long("code-exec")
-                        .help("Enable code execution tool (used with --skip-setup)")
                         .action(clap::ArgAction::SetTrue),
                 ),
         )

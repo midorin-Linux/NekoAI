@@ -135,38 +135,42 @@ impl StartCommand {
                         bail!("--token is required when using --skip-setup");
                     }
 
+                    // Prefer env vars for optional values to reduce CLI secret exposure
                     let api_key = sub_matches
                         .get_one::<String>("api-key")
                         .cloned()
+                        .or_else(|| std::env::var("NEKOAI_API_KEY").ok())
                         .unwrap_or_default();
 
                     let provider = sub_matches
                         .get_one::<String>("provider")
                         .cloned()
+                        .or_else(|| std::env::var("NEKOAI_PROVIDER").ok())
                         .unwrap_or_default();
 
                     let model = sub_matches
                         .get_one::<String>("model")
                         .cloned()
+                        .or_else(|| std::env::var("NEKOAI_MODEL").ok())
                         .unwrap_or_default();
 
                     let base_url = sub_matches
                         .get_one::<String>("base-url")
                         .cloned()
+                        .or_else(|| std::env::var("NEKOAI_BASE_URL").ok())
                         .unwrap_or_default();
 
                     let guild_id = sub_matches
                         .get_one::<String>("guild-id")
                         .cloned()
+                        .or_else(|| std::env::var("NEKOAI_GUILD_ID").ok())
                         .and_then(|s| s.parse::<u64>().ok())
                         .unwrap_or(0);
 
                     let web_search = sub_matches.get_flag("web-search");
-                    let code_exec = sub_matches.get_flag("code-exec");
 
                     let cfg = nekoai_setup::cli_fallback::make_config(
                         &token, &api_key, &provider, &model, &base_url, guild_id, web_search,
-                        code_exec,
                     );
                     info!(
                         "configuration built from CLI arguments (provider: {}, model: {})",

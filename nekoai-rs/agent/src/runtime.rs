@@ -65,7 +65,7 @@ struct ExtractedFact {
 struct ExtractionTask {
     session_key: SessionKey,
     user_id: Option<String>,
-    response: String,
+    conversation_batch: String,
 }
 
 const EXTRACTION_QUEUE_SIZE: usize = 100;
@@ -85,6 +85,9 @@ pub struct AgentRuntime {
     extraction_tx: mpsc::Sender<ExtractionTask>,
     tool_server_handle: ToolServerHandle,
     summarizing: Arc<DashMap<SessionKey, ()>>,
+    accumulated_conversations: Arc<DashMap<SessionKey, String>>,
+    message_since_last_extraction: Arc<DashMap<SessionKey, usize>>,
+    long_term_extraction_interval: usize,
 }
 
 impl AgentRuntime {
@@ -180,12 +183,19 @@ impl AgentRuntime {
             .await;
         });
 
+        let accumulated_conversations = Arc::new(DashMap::new());
+        let message_since_last_extraction = Arc::new(DashMap::new());
+        let long_term_extraction_interval = config.memory.long_term_extraction_interval;
+
         let tool_server_handle = ToolServer::new().run();
-        on_progress(RuntimeInitProgress::new(5, "tool server initialized"));
+        on_progress(RuntimeInitProgress::new(6, "tool server initialized"));
 
         on_progress(RuntimeInitProgress::new(6, "agent runtime initialized"));
 
-        info!("agent runtime initialized");
+        info!(
+            long_term_extraction_interval = long_term_extraction_interval,
+            "agent runtime initialized"
+        );
 
         Ok(Self {
             session_manager,
@@ -200,6 +210,9 @@ impl AgentRuntime {
             extraction_tx,
             tool_server_handle,
             summarizing,
+            accumulated_conversations,
+            message_since_last_extraction,
+            long_term_extraction_interval,
         })
     }
 
@@ -208,6 +221,10 @@ impl AgentRuntime {
 
         self.memory_store.clear_short_term(session_key);
         self.session_manager.clear(session_key)?;
+
+        // Reset long-term extraction accumulation for this session
+        self.accumulated_conversations.remove(session_key);
+        self.message_since_last_extraction.remove(session_key);
 
         if !messages.is_empty() {
             let this = self.clone();
@@ -354,11 +371,43 @@ impl AgentRuntime {
             .await;
         debug!("session history updated");
 
-        let conversation = format!(
-            "<user_content>{}</user_content>\n<assistant_content>{}</assistant_content>\n",
-            user_input, result
-        );
-        self.spawn_long_term_extraction(session_key.clone(), user_id, conversation);
+        // Accumulate conversation for long-term memory extraction
+        {
+            let mut acc = self
+                .accumulated_conversations
+                .entry(session_key.clone())
+                .or_default();
+            *acc += &format!(
+                "<user_content>{}</user_content>\n<assistant_content>{}</assistant_content>\n",
+                user_input, result
+            );
+        }
+
+        // Check if we've reached the extraction interval
+        let should_extract = {
+            let mut count = self
+                .message_since_last_extraction
+                .entry(session_key.clone())
+                .or_insert(0);
+            *count += 1;
+            if *count >= self.long_term_extraction_interval {
+                *count = 0;
+                true
+            } else {
+                false
+            }
+        };
+
+        if should_extract {
+            let conversation_batch = self
+                .accumulated_conversations
+                .remove(&session_key)
+                .map(|(_, v)| v)
+                .unwrap_or_default();
+            if !conversation_batch.is_empty() {
+                self.spawn_long_term_extraction(session_key.clone(), user_id, conversation_batch);
+            }
+        }
 
         Ok(AgentResponse { content: result })
     }
@@ -428,12 +477,12 @@ impl AgentRuntime {
         &self,
         session_key: SessionKey,
         user_id: Option<String>,
-        response: String,
+        conversation_batch: String,
     ) {
         let task = ExtractionTask {
             session_key,
             user_id,
-            response,
+            conversation_batch,
         };
 
         if let Err(e) = self.extraction_tx.try_send(task) {
@@ -500,11 +549,11 @@ async fn extract_and_store_long_term_facts(
     parameters: Parameters,
     session_key: SessionKey,
     user_id: Option<String>,
-    response: String,
+    conversation_batch: String,
 ) -> Result<()> {
     let prompt = format!(
-        "<long_term_extraction_task>\n  <instruction>Please output any important information from the following response in JSON format, which should be referenced in future conversations. Otherwise, return an empty array.</instruction>\n  <output_format>[{{\"fact\":\" ... \",\"tags\":[\" ... \"]}}]</output_format>\n  <response>{}</response>\n</long_term_extraction_task>",
-        escape_xml(&response)
+        "<long_term_extraction_task>\n  <instruction>Extract ALL important information from the following conversation in JSON format, which should be referenced in future conversations. Include user preferences, facts, decisions, and any other key information. Extract multiple distinct facts if multiple topics are discussed. Otherwise, return an empty array.</instruction>\n  <output_format>[{{\"fact\":\" ... \",\"tags\":[\" ... \"]}}]</output_format>\n  <conversation>{}</conversation>\n</long_term_extraction_task>",
+        escape_xml(&conversation_batch)
     );
 
     let retry_strategy = ExponentialBackoff::from_millis(100)
@@ -532,7 +581,7 @@ async fn extract_and_store_long_term_facts(
                     warn!(
                         session = %session_key.channel_id,
                         error = %e,
-                        extracted = %extracted,
+                        extracted_len = extracted.len(),
                         "JSON parse failed, retrying long-term memory extraction"
                     );
                     Err(e)
@@ -596,7 +645,7 @@ async fn extraction_task_processor(
                 parameters,
                 task.session_key,
                 task.user_id,
-                task.response,
+                task.conversation_batch,
             )
             .await
             {
@@ -621,7 +670,7 @@ fn parse_extracted_facts(raw: &str) -> Result<Vec<(String, Vec<String>)>> {
 
             parse_extracted_facts_json(&trimmed[start ..= end])
         })
-        .ok_or_else(|| anyhow::anyhow!("failed to parse extracted facts JSON: {}", raw))
+        .ok_or_else(|| anyhow::anyhow!("failed to parse extracted facts JSON"))
 }
 
 fn parse_extracted_facts_json(candidate: &str) -> Option<Vec<(String, Vec<String>)>> {

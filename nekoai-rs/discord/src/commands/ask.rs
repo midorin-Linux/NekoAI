@@ -63,7 +63,7 @@ pub async fn ask(ctx: Context<'_>, #[description = "Prompt"] prompt: String) -> 
         }
         Err(err) => {
             error!(error = %err, "failed to generate agent response");
-            err.to_string()
+            "An error occurred while processing your request. Please try again later.".to_string()
         }
     };
 

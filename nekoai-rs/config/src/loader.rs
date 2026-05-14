@@ -2,6 +2,7 @@ use std::fmt;
 
 use anyhow::Result;
 use config::{Config as ConfigBuilder, ConfigError, File};
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
@@ -117,6 +118,8 @@ pub struct Memory {
     pub long_term_top_k: usize,
     #[serde(default = "default_mid_term_retention_days")]
     pub mid_term_retention_days: u32,
+    #[serde(default = "default_long_term_extraction_interval")]
+    pub long_term_extraction_interval: usize,
 }
 
 impl Default for Memory {
@@ -127,6 +130,7 @@ impl Default for Memory {
             mid_term_top_k: default_mid_term_top_k(),
             long_term_top_k: default_long_term_top_k(),
             mid_term_retention_days: default_mid_term_retention_days(),
+            long_term_extraction_interval: default_long_term_extraction_interval(),
         }
     }
 }
@@ -173,6 +177,10 @@ const fn default_mid_term_retention_days() -> u32 {
     30
 }
 
+const fn default_long_term_extraction_interval() -> usize {
+    10
+}
+
 impl Config {
     pub fn load() -> Result<Self, ConfigError> {
         info!("loading configuration file");
@@ -196,22 +204,35 @@ impl Config {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct SecretKey(String);
+#[derive(Clone)]
+pub struct SecretKey(SecretString);
 
 impl SecretKey {
     pub fn new(value: String) -> Self {
-        Self(value)
+        Self(SecretString::new(value.into()))
     }
 
     pub fn expose(&self) -> &str {
-        self.0.as_str()
+        self.0.expose_secret()
     }
 }
 
 impl AsRef<str> for SecretKey {
     fn as_ref(&self) -> &str {
         self.expose()
+    }
+}
+
+impl Serialize for SecretKey {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.expose())
+    }
+}
+
+impl<'de> Deserialize<'de> for SecretKey {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        Ok(Self::new(s))
     }
 }
 
@@ -245,8 +266,6 @@ pub struct ToolPermissions {
     #[serde(default)]
     pub web_search: bool,
     #[serde(default)]
-    pub code_exec: bool,
-    #[serde(default)]
     pub searxng: SearxngConfig,
 }
 
@@ -254,9 +273,10 @@ impl fmt::Debug for SecretKey {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         let visible_length = 4;
         let masked = {
-            let length = self.0.chars().count();
+            let inner: &str = self.0.expose_secret();
+            let length = inner.chars().count();
             let start = length.saturating_sub(visible_length);
-            let extracted: String = self.0.chars().skip(start).collect();
+            let extracted: String = inner.chars().skip(start).collect();
             format!("{:*>20}", &extracted)
         };
         f.debug_tuple("SecretKey").field(&masked).finish()

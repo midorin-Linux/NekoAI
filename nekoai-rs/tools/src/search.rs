@@ -4,9 +4,13 @@
 //! - `SearxngSearch`: Searches the web using SearXNG meta search engine.
 //! - `WebFetch`: Fetches and extracts readable text content from a URL.
 
+use std::net::IpAddr;
+
 use rig::{completion::ToolDefinition, tool::Tool};
 use serde_json::{Value, json};
 use tracing;
+
+const SEARCH_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
 /// Search the web using SearXNG meta search engine.
 pub struct SearxngSearch {
@@ -90,7 +94,15 @@ impl Tool for SearxngSearch {
 
         tracing::debug!(target: "nekoai-tools", tool = Self::NAME, url = %request_url, "sending search request");
 
-        match self.client.get(&request_url).send().await {
+        match self
+            .client
+            .get(&request_url)
+            .header(reqwest::header::USER_AGENT, SEARCH_USER_AGENT)
+            .header(reqwest::header::ACCEPT, "application/json")
+            .header(reqwest::header::ACCEPT_LANGUAGE, "en-US,en;q=0.9")
+            .send()
+            .await
+        {
             Ok(response) => {
                 if !response.status().is_success() {
                     let status = response.status().as_u16();
@@ -230,6 +242,13 @@ impl Tool for WebFetch {
             return Ok(json!({
                 "ok": false,
                 "error": "url must start with http:// or https://"
+            }));
+        }
+
+        if is_private_url(&url) {
+            return Ok(json!({
+                "ok": false,
+                "error": "access to private or internal URLs is not allowed"
             }));
         }
 
@@ -412,7 +431,7 @@ fn truncate_at_char_boundary(s: &str, max_len: usize) -> String {
         .last()
         .map(|(i, c)| i + c.len_utf8())
         .unwrap_or(max_len.min(s.len()));
-    s[..end].to_string()
+    s[.. end].to_string()
 }
 
 /// Simple HTML tag stripper for fallback.
@@ -472,4 +491,55 @@ fn urlencoding(input: &str) -> String {
         }
     }
     result
+}
+
+/// Check if a URL targets a private or internal network address (SSRF prevention).
+fn is_private_url(url: &str) -> bool {
+    let host = match url
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .split('/')
+        .next()
+    {
+        Some(h) => h,
+        None => return false,
+    };
+
+    // Strip port number
+    let host = host.split(':').next().unwrap_or(host);
+
+    // Check well-known private hostnames
+    let lower = host.to_ascii_lowercase();
+    if lower == "localhost" || lower == "127.0.0.1" || lower == "::1" || lower == "[::1]" {
+        return true;
+    }
+
+    // Try to parse as IP address
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        match ip {
+            IpAddr::V4(v4) => {
+                if v4.is_loopback()
+                    || v4.is_private()
+                    || v4.is_link_local()
+                    || v4.is_unspecified()
+                    || v4.is_multicast()
+                {
+                    return true;
+                }
+            }
+            IpAddr::V6(v6) => {
+                if v6.is_loopback() || v6.is_unspecified() || v6.is_multicast() {
+                    return true;
+                }
+            }
+        }
+    }
+
+    // For hostnames, check common private DNS suffixes
+    if lower.ends_with(".internal") || lower.ends_with(".local") || lower.ends_with(".localdomain")
+    {
+        return true;
+    }
+
+    false
 }

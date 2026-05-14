@@ -5,6 +5,5 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-rig-core.workspace = true
 serenity.workspace = true
 tokio.workspace = true
