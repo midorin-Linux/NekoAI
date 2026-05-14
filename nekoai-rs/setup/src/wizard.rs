@@ -3,7 +3,7 @@ use colored::Colorize;
 use dialoguer::{Confirm, Input, Password, Select, theme::SimpleTheme};
 use nekoai_config::loader::{
     ChatPlatform, Config, ConversationModel, DEFAULT_QDRANT_URL, Discord, EmbeddingModel, Memory,
-    Parameters, Provider, SecretKey, SummarizerModel, ToolPermissions, VectorDb,
+    Parameters, Provider, SearxngConfig, SecretKey, SummarizerModel, ToolPermissions, VectorDb,
 };
 
 // ── Provider Presets ──────────────────────────────────────────────────────────
@@ -403,7 +403,7 @@ fn step_models(
 
 // ── Step 4: Tool Permissions ─────────────────────────────────────────────────
 
-fn step_tools() -> Result<bool> {
+fn step_tools() -> Result<ToolPermissions> {
     print_header(4, 5, "Tool Permissions");
     println!("  Enable the tools you want the agent to use:");
     print_subheader("You can change these later by editing the config file.");
@@ -413,8 +413,40 @@ fn step_tools() -> Result<bool> {
         .default(false)
         .interact()?;
 
+    let searxng = if web_search {
+        println!();
+        println!("  {}", "─── SearxNG Settings ───".bold());
+        println!();
+
+        let defaults = SearxngConfig::default();
+        let base_url = validated_input(
+            "  SearxNG URL",
+            Some(defaults.base_url.clone()),
+            validate_url,
+        )?;
+
+        println!();
+
+        let max_results_str = validated_input(
+            "  SearxNG max results",
+            Some(defaults.max_results.to_string()),
+            validate_positive_number,
+        )?;
+        let max_results: u64 = max_results_str.parse().unwrap_or(defaults.max_results);
+
+        SearxngConfig {
+            base_url,
+            max_results,
+        }
+    } else {
+        Default::default()
+    };
+
     print_footer();
-    Ok(web_search)
+    Ok(ToolPermissions {
+        web_search,
+        searxng,
+    })
 }
 
 // ── Advanced Settings Data ───────────────────────────────────────────────────
@@ -469,6 +501,7 @@ fn step_advanced() -> Result<AdvancedConfig> {
 
     let qdrant_api_key: String = Input::with_theme(&SimpleTheme)
         .with_prompt("  Qdrant API Key (leave empty if not required)")
+        .allow_empty(true)
         .interact_text()?;
 
     let qdrant_api_key = if qdrant_api_key.is_empty() {
@@ -569,7 +602,7 @@ fn print_summary(
     summarizer_model_name: &str,
     embed_model_name: &str,
     embed_dimension: u64,
-    web_search: bool,
+    tools: &ToolPermissions,
     guild_id: u64,
     advanced: &AdvancedConfig,
 ) {
@@ -595,12 +628,18 @@ fn print_summary(
     );
     println!(
         "  Web Search      : {}",
-        if web_search {
+        if tools.web_search {
             "✓ enabled".green()
         } else {
             "✗ disabled".red()
         }
     );
+    if tools.web_search {
+        println!();
+        println!("  {}", "─── SearxNG ───".dimmed());
+        println!("  URL             : {}", tools.searxng.base_url);
+        println!("  Max results     : {}", tools.searxng.max_results);
+    }
     // Advanced settings
     let m = &advanced.memory;
     println!();
@@ -641,7 +680,7 @@ pub fn run_wizard() -> Result<Config> {
         step_models(&default_model, &default_summarizer)?;
 
     // ── Step 4: Tool Permissions ─────────────────────────────
-    let web_search = step_tools()?;
+    let tools = step_tools()?;
 
     // ── Step 5: Advanced Settings ────────────────────────────
     let advanced = step_advanced()?;
@@ -654,7 +693,7 @@ pub fn run_wizard() -> Result<Config> {
         &summarizer_model_name,
         &embed_model_name,
         embed_dimension,
-        web_search,
+        &tools,
         guild_id,
         &advanced,
     );
@@ -698,8 +737,8 @@ pub fn run_wizard() -> Result<Config> {
         },
         memory: advanced.memory,
         tools: ToolPermissions {
-            web_search,
-            searxng: Default::default(),
+            web_search: tools.web_search,
+            searxng: tools.searxng.clone(),
         },
     };
 

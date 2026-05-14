@@ -148,7 +148,7 @@ pub struct Config {
     pub tools: ToolPermissions,
 }
 
-pub const DEFAULT_QDRANT_URL: &str = "http://localhost:6333";
+pub const DEFAULT_QDRANT_URL: &str = "http://localhost:6334";
 
 fn default_qdrant_url() -> String {
     DEFAULT_QDRANT_URL.to_string()
