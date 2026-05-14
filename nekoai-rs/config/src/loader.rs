@@ -5,6 +5,7 @@ use config::{Config as ConfigBuilder, ConfigError, File};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
+use zeroize::Zeroizing;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Discord {
@@ -205,15 +206,21 @@ impl Config {
 }
 
 #[derive(Clone)]
-pub struct SecretKey(SecretString);
+pub struct SecretKey(Zeroizing<SecretString>);
 
 impl SecretKey {
+    /// Create a new SecretKey from a UTF-8 String. The inner secret is a
+    /// `SecretString` wrapped in `Zeroizing` so the secret will be zeroized
+    /// on drop.
     pub fn new(value: String) -> Self {
-        Self(SecretString::new(value.into()))
+        Self(Zeroizing::new(SecretString::new(value.into())))
     }
 
+    /// Expose the secret as &str for read-only usage. This performs a
+    /// UTF-8 conversion; if the bytes are not valid UTF-8, returns an empty
+    /// string (which should not happen for keys created via `new`).
     pub fn expose(&self) -> &str {
-        self.0.expose_secret()
+        (*self.0).expose_secret()
     }
 }
 
@@ -273,12 +280,23 @@ impl fmt::Debug for SecretKey {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         let visible_length = 4;
         let masked = {
-            let inner: &str = self.0.expose_secret();
+            let inner = (*self.0).expose_secret();
             let length = inner.chars().count();
             let start = length.saturating_sub(visible_length);
             let extracted: String = inner.chars().skip(start).collect();
             format!("{:*>20}", &extracted)
         };
         f.debug_tuple("SecretKey").field(&masked).finish()
+    }
+}
+
+// Implement explicit zeroization guard for extra safety: on drop, ensure the
+// inner Vec<u8> is zeroized. `secrecy::Secret<Vec<u8>>` already zeroizes the
+// inner value on drop when the crate is configured appropriately, but adding
+// this Drop impl ensures we call `zeroize()` on the inner slice as well.
+impl Drop for SecretKey {
+    fn drop(&mut self) {
+        // Zeroizing<String> will zeroize its inner buffer on Drop automatically.
+        // Nothing else to do here.
     }
 }

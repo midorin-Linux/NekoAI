@@ -10,3 +10,4 @@ config.workspace = true
 secrecy.workspace = true
 serde.workspace = true
 tracing.workspace = true
+zeroize.workspace = true
