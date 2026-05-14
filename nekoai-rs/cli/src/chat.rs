@@ -17,6 +17,7 @@ impl ChatClient {
                     config.discord.token.expose().to_owned(),
                     config.discord.guild_id,
                     runtime,
+                    config,
                 )
                 .await?;
 

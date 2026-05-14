@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use nekoai_config::loader::Config;
+use nekoai_config::loader::{Config, DEFAULT_QDRANT_URL};
 use tracing::{info, warn};
 
 const CONFIG_PATH: &str = ".config/config.json";
@@ -174,7 +174,7 @@ fn merge_memory(merged: &mut Config, existing: &Config) {
     }
     // Vector DB
     if !existing.memory.vector_db.url.is_empty()
-        && existing.memory.vector_db.url != "http://localhost:6334"
+        && existing.memory.vector_db.url != DEFAULT_QDRANT_URL
     {
         merged.memory.vector_db.url = existing.memory.vector_db.url.clone();
     }

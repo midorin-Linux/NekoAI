@@ -3,29 +3,35 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 use nekoai_agent::runtime::AgentRuntime;
-use nekoai_tools::discord::{
-    channel::{
-        ArchiveChannel, CreateChannelTool, ListChannels, SetChannelPermissions, UpdateChannel,
+use nekoai_config::loader::Config;
+use nekoai_tools::{
+    discord::{
+        channel::{
+            ArchiveChannel, CreateChannelTool, ListChannels, SetChannelPermissions, UpdateChannel,
+        },
+        emoji::{AddEmoji, DeleteEmoji, GetReactionStats, ListEmojis},
+        guild::{GetAuditLog, GetGuildInfo, ManageBans, UpdateGuildSettings},
+        invite::{CreateInviteTool, ListInvites, RevokeInvite},
+        member::{
+            GetMemberActivity, InvestigateMember, KickMember, ManageMemberRoles, ModerateMember,
+            SearchMembers, TimeoutMember, UpdateMemberNickname,
+        },
+        message::{
+            AddReaction, BulkDeleteMessages, CreatePoll, FetchReadableChatHistory, PinMessage,
+            SearchMessages, SendAnnouncementWithPin, SendMessageTool, SendWebhookMessage,
+        },
+        role::{
+            AssignRoleByName, AssignRoleToMultipleMembers, AssignRoles, ClearRoleFromAllMembers,
+            CreateAndAssignRole, DuplicateRole, GetMembersWithRole, ListRoleMembers, ListRoles,
+            ReorderRoles, RevokeRoleByName, UpsertRole,
+        },
+        schedule::{
+            CreateScheduledEventTool, GetEventSubscribers, ListEvents, UpdateOrCancelEvent,
+        },
+        thread::{ArchiveOrLockThread, CreateThreadTool, ListThreads, ManageThreadMembers},
+        voice::{GetVoiceStates, ManageStageTopic, MoveMemberToVoice, SetVoiceMuteDeafen},
     },
-    emoji::{AddEmoji, DeleteEmoji, GetReactionStats, ListEmojis},
-    guild::{GetAuditLog, GetGuildInfo, ManageBans, UpdateGuildSettings},
-    invite::{CreateInviteTool, ListInvites, RevokeInvite},
-    member::{
-        GetMemberActivity, InvestigateMember, KickMember, ManageMemberRoles, ModerateMember,
-        SearchMembers, TimeoutMember, UpdateMemberNickname,
-    },
-    message::{
-        AddReaction, BulkDeleteMessages, CreatePoll, FetchReadableChatHistory, PinMessage,
-        SearchMessages, SendAnnouncementWithPin, SendMessageTool, SendWebhookMessage,
-    },
-    role::{
-        AssignRoleByName, AssignRoleToMultipleMembers, AssignRoles, ClearRoleFromAllMembers,
-        CreateAndAssignRole, DuplicateRole, GetMembersWithRole, ListRoleMembers, ListRoles,
-        ReorderRoles, RevokeRoleByName, UpsertRole,
-    },
-    schedule::{CreateScheduledEventTool, GetEventSubscribers, ListEvents, UpdateOrCancelEvent},
-    thread::{ArchiveOrLockThread, CreateThreadTool, ListThreads, ManageThreadMembers},
-    voice::{GetVoiceStates, ManageStageTopic, MoveMemberToVoice, SetVoiceMuteDeafen},
+    search::{SearxngSearch, WebFetch},
 };
 use serenity::{http::Http, prelude::*};
 use tracing::info;
@@ -41,6 +47,7 @@ impl DiscordClient {
         discord_token: String,
         guild_id: u64,
         agent_runtime: AgentRuntime,
+        config: &Config,
     ) -> Result<Self> {
         info!(guild_id, "creating discord client");
         let spinner = ProgressBar::new_spinner();
@@ -135,6 +142,18 @@ impl DiscordClient {
             SetVoiceMuteDeafen::new(http.clone()),
             ManageStageTopic::new(http.clone()),
         );
+
+        if config.tools.web_search {
+            let searxng_config = &config.tools.searxng;
+            let search_tool =
+                SearxngSearch::new(searxng_config.base_url.clone(), searxng_config.max_results);
+            runtime_for_tools.add_tool(search_tool).await;
+
+            let fetch_tool = WebFetch::new(10_000);
+            runtime_for_tools.add_tool(fetch_tool).await;
+
+            info!("web search and fetch tools registered");
+        }
 
         info!("discord client created");
 

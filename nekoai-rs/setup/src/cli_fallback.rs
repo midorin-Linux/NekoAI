@@ -64,6 +64,7 @@ pub fn make_config(
         tools: ToolPermissions {
             web_search,
             code_exec,
+            searxng: Default::default(),
         },
     }
 }

@@ -2,8 +2,8 @@ use anyhow::{Context, Result, bail};
 use colored::Colorize;
 use dialoguer::{Confirm, Input, Password, Select, theme::SimpleTheme};
 use nekoai_config::loader::{
-    ChatPlatform, Config, ConversationModel, Discord, EmbeddingModel, Memory, Parameters, Provider,
-    SecretKey, SummarizerModel, ToolPermissions, VectorDb,
+    ChatPlatform, Config, ConversationModel, DEFAULT_QDRANT_URL, Discord, EmbeddingModel, Memory,
+    Parameters, Provider, SecretKey, SummarizerModel, ToolPermissions, VectorDb,
 };
 
 // ── Provider Presets ──────────────────────────────────────────────────────────
@@ -455,10 +455,17 @@ fn step_advanced() -> Result<AdvancedConfig> {
     println!();
     println!("  {}", "─── Memory Settings ───".bold());
     println!();
+    println!(
+        "  {}",
+        "If you are using Docker Compose, start Qdrant with: docker compose up -d qdrant"
+            .to_string()
+            .dimmed()
+    );
+    println!();
 
     let qdrant_url = validated_input(
         "  Qdrant URL",
-        Some("http://localhost:6334".to_string()),
+        Some(DEFAULT_QDRANT_URL.to_string()),
         validate_url,
     )?;
 
@@ -697,6 +704,7 @@ pub fn run_wizard() -> Result<Config> {
         tools: ToolPermissions {
             web_search,
             code_exec,
+            searxng: Default::default(),
         },
     };
 

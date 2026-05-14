@@ -143,8 +143,10 @@ pub struct Config {
     pub tools: ToolPermissions,
 }
 
+pub const DEFAULT_QDRANT_URL: &str = "http://localhost:6333";
+
 fn default_qdrant_url() -> String {
-    "http://localhost:6334".to_string()
+    DEFAULT_QDRANT_URL.to_string()
 }
 
 fn default_mid_term_collection() -> String {
@@ -213,12 +215,39 @@ impl AsRef<str> for SecretKey {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearxngConfig {
+    #[serde(default = "default_searxng_url")]
+    pub base_url: String,
+    #[serde(default = "default_searxng_max_results")]
+    pub max_results: u64,
+}
+
+impl Default for SearxngConfig {
+    fn default() -> Self {
+        Self {
+            base_url: default_searxng_url(),
+            max_results: default_searxng_max_results(),
+        }
+    }
+}
+
+fn default_searxng_url() -> String {
+    "http://localhost:8080".to_string()
+}
+
+fn default_searxng_max_results() -> u64 {
+    5
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ToolPermissions {
     #[serde(default)]
     pub web_search: bool,
     #[serde(default)]
     pub code_exec: bool,
+    #[serde(default)]
+    pub searxng: SearxngConfig,
 }
 
 impl fmt::Debug for SecretKey {
