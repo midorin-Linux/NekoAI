@@ -1,0 +1,49 @@
+[discord]
+token = "MTIzODA1OTE5OTA2NjQxMTAwOA.Gf6h8r.9Tfy-EGkCu1WVT2gzOKBq5TGL044tI53Y6sYYU"
+guild_id = 1233632516750184489
+
+[provider.conversation_model]
+provider_base_url = "https://openrouter.ai/api/v1"
+api_key = "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"
+model_name = "deepseek/deepseek-v4-flash:exacto"
+
+[provider.conversation_model.parameters]
+max_token = 262144
+temperature = 1.0
+top_p = 0.95
+
+[provider.summarizer_model]
+provider_base_url = "https://openrouter.ai/api/v1"
+api_key = "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"
+model_name = "deepseek/deepseek-v4-flash:exacto"
+
+[provider.summarizer_model.parameters]
+max_token = 8192
+temperature = 0.2
+top_p = 0.95
+
+[provider.embedding_model]
+provider_base_url = "https://openrouter.ai/api/v1"
+api_key = "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"
+model_name = "nvidia/llama-nemotron-embed-vl-1b-v2:free"
+dimension = 1536
+
+[memory.vector_db]
+url = "http://localhost:6334"
+api_key = ""
+mid_term_collection = "mid_term"
+long_term_collection = "long_term"
+
+[memory]
+short_term_max_entries = 20
+mid_term_top_k = 3
+long_term_top_k = 5
+mid_term_retention_days = 30
+long_term_extraction_interval = 10
+
+[tools]
+web_search = true
+
+[tools.searxng]
+base_url = "http://localhost:8080"
+max_results = 5

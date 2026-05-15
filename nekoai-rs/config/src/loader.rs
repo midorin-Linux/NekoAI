@@ -1,7 +1,7 @@
 use std::fmt;
 
-use anyhow::Result;
-use config::{Config as ConfigBuilder, ConfigError, File};
+use anyhow::{Context, Result};
+use config::{Config as ConfigBuilder, File};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
@@ -136,18 +136,6 @@ impl Default for Memory {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Config {
-    #[serde(default)]
-    pub chat_platform: ChatPlatform,
-    pub discord: Discord,
-    pub provider: Provider,
-    #[serde(default)]
-    pub memory: Memory,
-    #[serde(default)]
-    pub tools: ToolPermissions,
-}
-
 pub const DEFAULT_QDRANT_URL: &str = "http://localhost:6334";
 
 fn default_qdrant_url() -> String {
@@ -183,25 +171,46 @@ const fn default_long_term_extraction_interval() -> usize {
 }
 
 impl Config {
-    pub fn load() -> Result<Self, ConfigError> {
+    pub fn load() -> anyhow::Result<Self> {
         info!("loading configuration file");
-        let config = ConfigBuilder::builder()
-            .add_source(
-                File::with_name(".config/config.json")
-                    .format(config::FileFormat::Json)
-                    .required(true),
-            )
-            .build()?;
+
+        // Try TOML first, fall back to JSON for migration
+        let toml_path = std::path::Path::new(".config/config.toml");
+        let json_path = std::path::Path::new(".config/config.json");
+
+        let config = if toml_path.exists() {
+            info!("loading config from .config/config.toml");
+            ConfigBuilder::builder()
+                .add_source(
+                    File::from(toml_path)
+                        .format(config::FileFormat::Toml)
+                        .required(true),
+                )
+                .build()
+                .context("failed to build config from .config/config.toml")?
+        } else if json_path.exists() {
+            info!("loading config from .config/config.json (legacy format)");
+            ConfigBuilder::builder()
+                .add_source(
+                    File::from(json_path)
+                        .format(config::FileFormat::Json)
+                        .required(true),
+                )
+                .build()
+                .context("failed to build config from .config/config.json")?
+        } else {
+            anyhow::bail!(
+                "no configuration file found: expected .config/config.toml or .config/config.json"
+            );
+        };
 
         debug!("configuration source parsed");
 
-        let parsed = config.try_deserialize();
+        let parsed: Self = config.try_deserialize()?;
 
-        if parsed.is_ok() {
-            info!("configuration deserialized successfully");
-        }
+        info!("configuration deserialized successfully");
 
-        parsed
+        Ok(parsed)
     }
 }
 
@@ -268,12 +277,77 @@ fn default_searxng_max_results() -> u64 {
     5
 }
 
+fn default_code_exec_languages() -> Vec<String> {
+    vec!["python".to_string()]
+}
+
+const fn default_code_exec_timeout() -> u64 {
+    30
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeExecConfig {
+    #[serde(default = "default_code_exec_languages")]
+    pub allowed_languages: Vec<String>,
+    #[serde(default = "default_code_exec_timeout")]
+    pub timeout_seconds: u64,
+}
+
+impl Default for CodeExecConfig {
+    fn default() -> Self {
+        Self {
+            allowed_languages: default_code_exec_languages(),
+            timeout_seconds: default_code_exec_timeout(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReadFileConfig {
+    #[serde(default)]
+    pub allowed: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct McpServerConfig {
+    pub name: String,
+    pub transport: String,
+    #[serde(default)]
+    pub command: Option<String>,
+    #[serde(default)]
+    pub args: Option<Vec<String>>,
+    #[serde(default)]
+    pub url: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ToolPermissions {
     #[serde(default)]
     pub web_search: bool,
     #[serde(default)]
     pub searxng: SearxngConfig,
+    #[serde(default)]
+    pub code_exec: bool,
+    #[serde(default)]
+    pub read_file: bool,
+    #[serde(default)]
+    pub code_exec_sandbox: CodeExecConfig,
+    #[serde(default)]
+    pub read_file_dirs: ReadFileConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Config {
+    #[serde(default)]
+    pub chat_platform: ChatPlatform,
+    pub discord: Discord,
+    pub provider: Provider,
+    #[serde(default)]
+    pub memory: Memory,
+    #[serde(default)]
+    pub tools: ToolPermissions,
+    #[serde(default)]
+    pub mcp_servers: Vec<McpServerConfig>,
 }
 
 impl fmt::Debug for SecretKey {

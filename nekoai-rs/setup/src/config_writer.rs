@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use nekoai_config::loader::{Config, DEFAULT_QDRANT_URL};
 use tracing::{info, warn};
 
-const CONFIG_PATH: &str = ".config/config.json";
+const CONFIG_PATH: &str = ".config/config.toml";
 
 /// Save a Config to the config file path.
 /// If the file already exists, merge the new config with the existing one
@@ -28,10 +28,10 @@ pub fn save_config(config: &Config) -> Result<()> {
         config.clone()
     };
 
-    let json = serde_json::to_string_pretty(&final_config)
-        .context("failed to serialize config to JSON")?;
+    let toml_output =
+        toml::to_string_pretty(&final_config).context("failed to serialize config to TOML")?;
 
-    std::fs::write(CONFIG_PATH, &json)
+    std::fs::write(CONFIG_PATH, &toml_output)
         .with_context(|| format!("failed to write config file: {CONFIG_PATH}"))?;
 
     info!(path = CONFIG_PATH, "configuration saved successfully");
@@ -45,7 +45,7 @@ fn merge_with_existing(new_config: &Config) -> Result<Config> {
     let existing_content = std::fs::read_to_string(CONFIG_PATH)
         .with_context(|| format!("failed to read existing config: {CONFIG_PATH}"))?;
 
-    let existing: Config = serde_json::from_str(&existing_content)
+    let existing: Config = toml::from_str(&existing_content)
         .with_context(|| format!("failed to parse existing config: {CONFIG_PATH}"))?;
 
     let mut merged = new_config.clone();

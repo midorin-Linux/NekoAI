@@ -446,6 +446,10 @@ fn step_tools() -> Result<ToolPermissions> {
     Ok(ToolPermissions {
         web_search,
         searxng,
+        code_exec: false,
+        read_file: false,
+        code_exec_sandbox: Default::default(),
+        read_file_dirs: Default::default(),
     })
 }
 
@@ -739,7 +743,12 @@ pub fn run_wizard() -> Result<Config> {
         tools: ToolPermissions {
             web_search: tools.web_search,
             searxng: tools.searxng.clone(),
+            code_exec: false,
+            read_file: false,
+            code_exec_sandbox: Default::default(),
+            read_file_dirs: Default::default(),
         },
+        mcp_servers: Vec::new(),
     };
 
     Ok(config)

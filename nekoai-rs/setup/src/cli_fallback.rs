@@ -64,7 +64,12 @@ pub fn make_config(
         tools: ToolPermissions {
             web_search,
             searxng: Default::default(),
+            code_exec: false,
+            read_file: false,
+            code_exec_sandbox: Default::default(),
+            read_file_dirs: Default::default(),
         },
+        mcp_servers: Vec::new(),
     }
 }
 

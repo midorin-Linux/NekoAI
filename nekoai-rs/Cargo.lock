@@ -2078,6 +2078,7 @@ dependencies = [
  "colored",
  "dialoguer",
  "nekoai-config",
+ "serde_json",
  "toml 0.8.23",
  "tracing",
 ]
@@ -2086,7 +2087,9 @@ dependencies = [
 name = "nekoai-tools"
 version = "1.0.0"
 dependencies = [
+ "async-trait",
  "chrono",
+ "nekoai-config",
  "nekoai-domain",
  "reqwest 0.13.3",
  "rig-core",
@@ -2095,8 +2098,10 @@ dependencies = [
  "serde_json",
  "serenity",
  "thiserror 2.0.18",
+ "tokio",
  "tokio-retry",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

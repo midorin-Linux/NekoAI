@@ -2,9 +2,11 @@ pub mod cli_fallback;
 pub mod config_writer;
 pub mod wizard;
 
-use anyhow::Result;
+use std::path::Path;
+
+use anyhow::{Context, Result};
 use nekoai_config::loader::Config;
-use tracing::info;
+use tracing::{info, warn};
 
 /// Environment variable names for configuration (preferred over CLI flags).
 pub const ENV_DISCORD_TOKEN: &str = "DISCORD_AGENT_TOKEN";
@@ -53,5 +55,41 @@ pub fn config_from_env() -> Option<Config> {
 
 /// Check if a configuration file already exists at the expected path.
 pub fn config_exists() -> bool {
-    std::fs::exists(".config/config.json").unwrap_or(false)
+    let toml_path = Path::new(".config/config.toml");
+    let json_path = Path::new(".config/config.json");
+    toml_path.exists() || json_path.exists()
+}
+
+/// Migrate a legacy JSON config file to TOML format.
+/// Reads `.config/config.json`, writes `.config/config.toml`,
+/// and renames the JSON file to `.config/config.json.bak`.
+pub fn migrate_json_to_toml() -> Result<bool> {
+    let json_path = Path::new(".config/config.json");
+    let toml_path = Path::new(".config/config.toml");
+
+    if !json_path.exists() || toml_path.exists() {
+        return Ok(false);
+    }
+
+    info!("migrating legacy config.json to config.toml");
+
+    let json_content =
+        std::fs::read_to_string(json_path).context("failed to read legacy config.json")?;
+    let config: Config =
+        serde_json::from_str(&json_content).context("failed to parse legacy config.json")?;
+
+    let toml_output =
+        toml::to_string_pretty(&config).context("failed to serialize config to TOML")?;
+    std::fs::write(toml_path, &toml_output).context("failed to write config.toml")?;
+
+    let bak_path = json_path.with_extension("json.bak");
+    std::fs::rename(json_path, &bak_path)
+        .context("failed to rename config.json to config.json.bak")?;
+
+    warn!(
+        "legacy config.json migrated to config.toml; a backup was saved at {}",
+        bak_path.display()
+    );
+
+    Ok(true)
 }

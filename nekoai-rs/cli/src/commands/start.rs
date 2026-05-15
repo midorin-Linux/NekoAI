@@ -6,7 +6,9 @@ use indicatif::{ProgressBar, ProgressStyle};
 use nekoai_config::loader::Config;
 use nekoai_infra::logging::{WorkerGuard, init_tracing};
 use nekoai_memory::store::MemoryStore;
-use nekoai_setup::{config_exists, config_from_env, has_env_token, run_setup_wizard};
+use nekoai_setup::{
+    config_exists, config_from_env, has_env_token, migrate_json_to_toml, run_setup_wizard,
+};
 use tokio::time::sleep;
 use tracing::{error, info, warn};
 
@@ -74,10 +76,24 @@ impl StartCommand {
 
         info!("Checking for configuration file");
 
+        // Auto-migrate legacy JSON config to TOML if needed
+        if let Err(e) = migrate_json_to_toml() {
+            warn!(error = %e, "failed to migrate legacy config.json (may not exist)");
+        }
+
         let config = if config_exists() {
-            info!("Configuration file found at .config/config.json");
+            let config_path = if std::path::Path::new(".config/config.toml").exists() {
+                ".config/config.toml"
+            } else {
+                ".config/config.json"
+            };
+
+            info!("Configuration file found at {config_path}");
             spinner.finish_and_clear();
-            println!("    {} Configuration file found", "✓".green());
+            println!(
+                "    {} Configuration file found ({config_path})",
+                "✓".green()
+            );
 
             // Load existing config
             Config::load()
@@ -97,7 +113,7 @@ impl StartCommand {
         } else {
             spinner.finish_and_clear();
 
-            warn!("No configuration file found at .config/config.json");
+            warn!("No configuration file found at .config/config.toml");
             println!("    {} No configuration found\n", "✗".red());
             println!(
                 "    It's likely that this is the first time the program is running, or the configuration file has been deleted."
