@@ -1,5 +1,5 @@
 target
 logs
-.config/config.json
+.config/config.toml
 **/*.rs.bk
 *.pdb
