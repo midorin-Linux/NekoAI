@@ -1,11 +1,11 @@
 # NekoAI
 
-NekoAI は Rust 製の Discord 用 AI エージェントです。Rig SDK をベースに、Discord コマンド、3 層メモリ、OpenAI 互換モデル設定、セットアップウィザードをまとめています。
+NekoAI は Rust 製の Discord 用 AI エージェントです。Rig SDK をベースに、Discord コマンド、3 層メモリ、OpenAI 互換モデル設定、セットアップウィザードを備えています。
 
 ## 概要
 
 - 現在のチャットプラットフォームは Discord のみです。
-- `/ask` / `/clear` / `/history` を提供し、prefix は `w!ask` / `w!clear` です。
+- スラッシュコマンド `/ask` / `/clear` / `/history` と、プレフィックスコマンド `w!ask` / `w!clear` を提供します。
 - 短期・中期・長期の 3 層メモリを持ちます。
 - メモリ用の vector DB には Qdrant 実装と in-memory 実装があります。実行時は中期・長期メモリに Qdrant、短期メモリにインメモリを使います。
 - 必要に応じて SearXNG ベースの `web_search` / `web_fetch` を使えます。
@@ -54,7 +54,7 @@ cd NekoAI/nekoai-rs
 
 ### 設定
 
-- 初回起動で `.config/config.json` がなければ、セットアップウィザードが開きます。
+- 初回起動で `.config/config.json` がなければ、セットアップウィザードが起動します。
 - ウィザードは Discord、provider、model selection、tool permissions、advanced settings の 5 ステップです。
 - 既存の `config.json` がある場合は、保存時に既存値を優先してマージされます。
 - システムプロンプトは `.config/INSTRUCTION.md` に置きます。なければデフォルトプロンプトが使われます。
@@ -92,7 +92,7 @@ docker run -d --name qdrant -p 6333:6333 -p 6334:6334 -e QDRANT__SERVICE__GRPC_P
 just neko start
 ```
 
-または次でも起動できます。
+以下のコマンドでも起動できます。
 
 ```bash
 cargo run --bin nekoai-cli -- start
@@ -110,21 +110,21 @@ cargo run --bin nekoai-cli -- start
 - 主なデフォルト値は `short_term_max_entries=20`, `mid_term_top_k=3`, `long_term_top_k=5`, `mid_term_retention_days=30`, `long_term_extraction_interval=10` です。
 - embedding の既定は `text-embedding-3-small` / `1536` です。
 - セットアップウィザードには `openai`, `anthropic`, `ollama`, `custom` のプリセットがあります。
-- 実行時は OpenAI 互換 API を使うので、カスタム URL も互換エンドポイントを用意してください。
+- 実行時は OpenAI 互換 API を使うため、カスタム URL には互換エンドポイントを指定してください。
 
 ## Discord コマンド
 
 | Command | Scope | Notes |
 |---|---|---|
-| `/ask <message>` | slash / `w!ask` | エージェントへ送信します。長い応答は 2000 文字単位で分割されます。 |
+| `/ask <message>` | slash / `w!ask` | エージェントにメッセージを送信します。長い応答は 2000 文字単位で分割されます。 |
 | `/clear` | slash / `w!clear` | 現在のセッションをクリアします。短期メモリはバックグラウンドで mid-term に昇格します。 |
 | `/history` | slash only | 直近の会話履歴を表示します。長い履歴は Discord の文字数制限を超える可能性があります。 |
 
 ## ツール
 
-- Discord tools は `message`, `channel`, `guild`, `member`, `role`, `thread`, `voice`, `invite`, `emoji`, `schedule` を含みます。
+- Discord ツールには `message`, `channel`, `guild`, `member`, `role`, `thread`, `voice`, `invite`, `emoji`, `schedule` が含まれます。
 - `web_search` と `web_fetch` は `tools.web_search = true` のときだけ登録されます。
-- `web_search` は SearXNG を使い、`web_fetch` は readable text を抽出します。
+- `web_search` は SearXNG を使い、`web_fetch` は読み取り可能なテキストを抽出します。
 
 ## 処理の流れ
 
@@ -132,7 +132,7 @@ cargo run --bin nekoai-cli -- start
 - session key を解決します。
 - mid-term / long-term memory を recall します。
 - system instruction、session history、memory をまとめてコンテキストを構築します。
-- Rig agent が tool server 付きで推論します。
+- Rig エージェントがツールサーバー付きで推論を実行します。
 - short-term memory と session history を更新します。
 - `long_term_extraction_interval` ごとに background extraction を走らせます。
 
@@ -163,7 +163,7 @@ npm run typecheck
 
 ## 既知の制限
 
-- 通常の memory persistence は Qdrant に依存します。
+- メモリの永続化は Qdrant に依存します。
 - `/history` は Discord の 2000 文字制限を超える可能性があります。
 - web search はデフォルトで無効です。
 
