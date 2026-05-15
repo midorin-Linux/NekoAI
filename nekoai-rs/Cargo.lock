@@ -2097,10 +2097,12 @@ dependencies = [
  "serde",
  "serde_json",
  "serenity",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-retry",
  "tracing",
+ "url",
  "uuid",
 ]
 

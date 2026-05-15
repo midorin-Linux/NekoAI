@@ -4,6 +4,7 @@ use dialoguer::{Confirm, Input, Password, Select, theme::SimpleTheme};
 use nekoai_config::loader::{
     ChatPlatform, Config, ConversationModel, DEFAULT_QDRANT_URL, Discord, EmbeddingModel, Memory,
     Parameters, Provider, SearxngConfig, SecretKey, SummarizerModel, ToolPermissions, VectorDb,
+    WebUiConfig,
 };
 
 // ── Provider Presets ──────────────────────────────────────────────────────────
@@ -181,7 +182,7 @@ fn validate_positive_number(s: &str) -> Result<(), String> {
 
 fn validate_temperature(s: &str) -> Result<(), String> {
     match s.parse::<f64>() {
-        Ok(n) if (0.0 ..= 2.0).contains(&n) => Ok(()),
+        Ok(n) if (0.0..=2.0).contains(&n) => Ok(()),
         Ok(_) => Err("Temperature must be between 0.0 and 2.0".to_string()),
         Err(_) => Err("Temperature must be a decimal number (e.g., 1.0)".to_string()),
     }
@@ -189,7 +190,7 @@ fn validate_temperature(s: &str) -> Result<(), String> {
 
 fn validate_top_p(s: &str) -> Result<(), String> {
     match s.parse::<f64>() {
-        Ok(n) if (0.0 ..= 1.0).contains(&n) => Ok(()),
+        Ok(n) if (0.0..=1.0).contains(&n) => Ok(()),
         Ok(_) => Err("Top P must be between 0.0 and 1.0".to_string()),
         Err(_) => Err("Top P must be a decimal number (e.g., 0.95)".to_string()),
     }
@@ -749,6 +750,7 @@ pub fn run_wizard() -> Result<Config> {
             read_file_dirs: Default::default(),
         },
         mcp_servers: Vec::new(),
+        web_ui: WebUiConfig::default(),
     };
 
     Ok(config)

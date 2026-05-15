@@ -337,6 +337,33 @@ pub struct ToolPermissions {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebUiConfig {
+    /// Address to bind the HTTP server (default: 127.0.0.1:8080)
+    #[serde(default = "default_web_ui_bind")]
+    pub bind_address: String,
+    /// Optional bearer token for API authentication
+    #[serde(default)]
+    pub auth_token: Option<String>,
+    /// Allowed CORS origins (default: empty = allow only loopback)
+    #[serde(default)]
+    pub allowed_origins: Vec<String>,
+}
+
+fn default_web_ui_bind() -> String {
+    "127.0.0.1:8080".to_string()
+}
+
+impl Default for WebUiConfig {
+    fn default() -> Self {
+        Self {
+            bind_address: default_web_ui_bind(),
+            auth_token: None,
+            allowed_origins: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     #[serde(default)]
     pub chat_platform: ChatPlatform,
@@ -348,6 +375,8 @@ pub struct Config {
     pub tools: ToolPermissions,
     #[serde(default)]
     pub mcp_servers: Vec<McpServerConfig>,
+    #[serde(default)]
+    pub web_ui: WebUiConfig,
 }
 
 impl fmt::Debug for SecretKey {

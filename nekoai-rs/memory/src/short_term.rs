@@ -61,7 +61,7 @@ impl ShortTermMemory {
         // Drain excess entries from the front in a single shot.
         let len = queue.len();
         if len > self.max_entry {
-            queue.drain(.. len - self.max_entry);
+            queue.drain(..len - self.max_entry);
         }
 
         debug!(session = %session_key.channel_id, entry_count = queue.len(), "short-term memory updated");

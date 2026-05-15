@@ -326,7 +326,7 @@ fn parse_smart_timestamp(value: &str) -> Option<Timestamp> {
             } else {
                 Local::now().date_naive() + ChronoDuration::days(1)
             };
-            let rest = trimmed[prefix.len() ..].trim();
+            let rest = trimmed[prefix.len()..].trim();
             let time = parse_local_time_of_day(rest)?;
             return local_naive_to_timestamp(date.and_time(time));
         }

@@ -50,8 +50,15 @@ impl ToolRegistry {
     }
 
     /// Register a tool with its name and access level.
-    pub fn register(&mut self, name: &'static str, access: ToolAccess) {
+    /// Returns `true` if the tool was registered, `false` if already registered.
+    pub fn register(&mut self, name: &'static str, access: ToolAccess) -> bool {
+        // Check for duplicates
+        if self.entries.iter().any(|e| e.name == name) {
+            tracing::warn!(tool = name, "tool already registered, skipping duplicate");
+            return false;
+        }
         self.entries.push(RegistryEntry { name, access });
+        true
     }
 
     /// Check if a named tool is enabled under the given permissions.

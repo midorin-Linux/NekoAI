@@ -175,7 +175,14 @@ impl Tool for ReadFile {
                     .to_string();
 
                 if content.len() > max_length {
-                    let mut truncated = content[.. max_length].to_string();
+                    // Find a safe UTF-8 char boundary at or before max_length bytes.
+                    let end = content
+                        .char_indices()
+                        .take_while(|(i, _)| *i <= max_length)
+                        .last()
+                        .map(|(i, c)| i + c.len_utf8())
+                        .unwrap_or(max_length.min(content.len()));
+                    let mut truncated = content[..end].to_string();
                     truncated.push_str("\n... (file truncated)");
                     Ok(json!({
                         "ok": true,

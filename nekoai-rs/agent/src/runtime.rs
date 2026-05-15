@@ -1,4 +1,5 @@
-use std::{sync::Arc, time::Duration};
+use std::future::Future;
+use std::{pin::Pin, sync::Arc, time::Duration};
 
 use anyhow::{Context, Result};
 use dashmap::DashMap;
@@ -17,9 +18,9 @@ use nekoai_memory::{
     store::MemoryStore,
 };
 use rig::{
-    completion::{Message, Prompt},
+    completion::{Message, Prompt, ToolDefinition},
     tool::{
-        ToolDyn,
+        ToolDyn, ToolError,
         server::{ToolServer, ToolServerHandle},
     },
 };
@@ -353,7 +354,7 @@ impl AgentRuntime {
         let tool_handle = self.tool_server_handle.clone();
         let user_message = context.user_message.clone();
 
-        let result = with_caller_context(caller_context, async {
+        let result = match with_caller_context(caller_context, async {
             Retry::spawn(retry_strategy, || {
                 let cm = cm.clone();
                 let mn = model_name.clone();
@@ -373,9 +374,21 @@ impl AgentRuntime {
             })
             .await
         })
-        .await?;
-        self.metrics.record_latency(start.elapsed());
-        info!(response_len = result.len(), "received model response");
+        .await
+        {
+            Ok(r) => {
+                self.metrics.record_latency(start.elapsed());
+                info!(response_len = r.len(), "received model response");
+                r
+            }
+            Err(e) => {
+                self.event_bus.publish(AgentEvent::ErrorOccurred {
+                    session_key: session_key.clone(),
+                    error: format!("{}", e),
+                });
+                return Err(e.into());
+            }
+        };
 
         self.event_bus.publish(AgentEvent::ResponseCompleted {
             session_key: session_key.clone(),
@@ -535,7 +548,10 @@ impl AgentRuntime {
     }
 
     pub async fn add_tool(&self, tool: impl ToolDyn + 'static) {
-        if let Err(e) = self.tool_server_handle.add_tool(tool).await {
+        let instrumented = InstrumentedTool {
+            inner: Box::new(tool),
+        };
+        if let Err(e) = self.tool_server_handle.add_tool(instrumented).await {
             warn!(error = %e, "failed to register tool");
         } else {
             info!("tool registered successfully");
@@ -583,6 +599,32 @@ impl WebUiAgent for AgentRuntime {
     ) -> anyhow::Result<String> {
         let resp = AgentRuntime::submit(self, session_key, user_id, content).await?;
         Ok(resp.content)
+    }
+}
+
+/// Wrapper around `ToolDyn` for future instrumentation.
+/// TODO: Add `ToolCalled` / `ToolResult` events when Rig SDK supports caller-context passthrough.
+struct InstrumentedTool {
+    inner: Box<dyn ToolDyn>,
+}
+
+impl ToolDyn for InstrumentedTool {
+    fn name(&self) -> String {
+        self.inner.name()
+    }
+
+    fn definition<'a>(
+        &'a self,
+        prompt: String,
+    ) -> Pin<Box<dyn Future<Output = ToolDefinition> + Send + 'a>> {
+        self.inner.definition(prompt)
+    }
+
+    fn call<'a>(
+        &'a self,
+        args: String,
+    ) -> Pin<Box<dyn Future<Output = Result<String, ToolError>> + Send + 'a>> {
+        self.inner.call(args)
     }
 }
 
@@ -755,7 +797,7 @@ fn parse_extracted_facts(raw: &str) -> Result<Vec<(String, Vec<String>)>> {
                 return None;
             }
 
-            parse_extracted_facts_json(&trimmed[start ..= end])
+            parse_extracted_facts_json(&trimmed[start..=end])
         })
         .ok_or_else(|| anyhow::anyhow!("failed to parse extracted facts JSON"))
 }

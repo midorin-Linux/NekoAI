@@ -60,7 +60,10 @@ impl EventBus {
     }
 
     pub fn publish(&self, event: AgentEvent) {
-        let _ = self.sender.send(event);
+        // Log debug message if there are no active subscribers
+        if let Err(broadcast::error::SendError(_)) = self.sender.send(event) {
+            tracing::debug!(target: "event_bus", "no active subscribers for event");
+        }
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<AgentEvent> {

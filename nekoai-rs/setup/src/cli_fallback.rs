@@ -1,6 +1,6 @@
 use nekoai_config::loader::{
     ChatPlatform, Config, ConversationModel, Discord, EmbeddingModel, Memory, Parameters, Provider,
-    SecretKey, SummarizerModel, ToolPermissions, VectorDb,
+    SecretKey, SummarizerModel, ToolPermissions, VectorDb, WebUiConfig,
 };
 use tracing::warn;
 
@@ -70,6 +70,7 @@ pub fn make_config(
             read_file_dirs: Default::default(),
         },
         mcp_servers: Vec::new(),
+        web_ui: WebUiConfig::default(),
     }
 }
 

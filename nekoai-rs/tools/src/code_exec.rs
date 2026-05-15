@@ -4,6 +4,7 @@ use rig::{completion::ToolDefinition, tool::Tool};
 use serde_json::{Value, json};
 use tokio::process::Command;
 use tracing;
+use tempfile::TempDir;
 
 const MAX_OUTPUT_SIZE: usize = 64 * 1024; // 64KB max output
 
@@ -108,16 +109,19 @@ impl Tool for CodeExec {
             }));
         }
 
-        // Create a temp directory for execution
-        let temp_dir = std::env::temp_dir().join(format!("nekoai_exec_{}", uuid::Uuid::new_v4()));
-        if let Err(e) = tokio::fs::create_dir_all(&temp_dir).await {
-            return Ok(json!({
-                "ok": false,
-                "error": format!("failed to create temp directory: {}", e)
-            }));
-        }
+        // Create a temp directory for execution using tempfile for security
+        let temp_dir = match TempDir::new() {
+            Ok(dir) => dir,
+            Err(e) => {
+                return Ok(json!({
+                    "ok": false,
+                    "error": format!("failed to create temp directory: {}", e)
+                }));
+            }
+        };
 
-        let source_file = temp_dir.join(format!("main.{}", extension));
+        let temp_path = temp_dir.path();
+        let source_file = temp_path.join(format!("main.{}", extension));
         if let Err(e) = tokio::fs::write(&source_file, code).await {
             let _ = tokio::fs::remove_dir_all(&temp_dir).await;
             return Ok(json!({
@@ -131,8 +135,8 @@ impl Tool for CodeExec {
             let compile_result = Command::new("rustc")
                 .arg(&source_file)
                 .arg("-o")
-                .arg(temp_dir.join("main"))
-                .current_dir(&temp_dir)
+                .arg(temp_path.join("main"))
+                .current_dir(&temp_path)
                 .output()
                 .await;
 
@@ -140,18 +144,18 @@ impl Tool for CodeExec {
                 Ok(output) => {
                     if !output.status.success() {
                         let stderr = String::from_utf8_lossy(&output.stderr);
-                        let _ = tokio::fs::remove_dir_all(&temp_dir).await;
+                        let truncated_err = truncate_output(&stderr);
                         return Ok(json!({
                             "ok": false,
-                            "error": format!("compilation failed:\n{}", truncate_output(&stderr))
+                            "error": format!("compilation failed:\n{}", truncated_err)
                         }));
                     }
 
                     // Run the compiled binary
                     let run_result = tokio::time::timeout(
                         Duration::from_secs(self.timeout_seconds),
-                        Command::new(temp_dir.join("main"))
-                            .current_dir(&temp_dir)
+                        Command::new(temp_path.join("main"))
+                            .current_dir(&temp_path)
                             .output(),
                     )
                     .await;
@@ -161,7 +165,6 @@ impl Tool for CodeExec {
                             let stdout = String::from_utf8_lossy(&output.stdout);
                             let stderr = String::from_utf8_lossy(&output.stderr);
                             let code = output.status.code().unwrap_or(-1);
-                            let _ = tokio::fs::remove_dir_all(&temp_dir).await;
                             Ok(json!({
                                 "ok": output.status.success(),
                                 "data": {
@@ -173,14 +176,12 @@ impl Tool for CodeExec {
                             }))
                         }
                         Ok(Err(e)) => {
-                            let _ = tokio::fs::remove_dir_all(&temp_dir).await;
                             Ok(json!({
                                 "ok": false,
                                 "error": format!("execution failed: {}", e)
                             }))
                         }
                         Err(_) => {
-                            let _ = tokio::fs::remove_dir_all(&temp_dir).await;
                             Ok(json!({
                                 "ok": false,
                                 "error": format!("execution timed out after {}s", self.timeout_seconds)
@@ -189,7 +190,6 @@ impl Tool for CodeExec {
                     }
                 }
                 Err(e) => {
-                    let _ = tokio::fs::remove_dir_all(&temp_dir).await;
                     Ok(json!({
                         "ok": false,
                         "error": format!("failed to start compiler: {}", e)
@@ -202,7 +202,7 @@ impl Tool for CodeExec {
                 Duration::from_secs(self.timeout_seconds),
                 Command::new(interpreter)
                     .arg(&source_file)
-                    .current_dir(&temp_dir)
+                    .current_dir(&temp_path)
                     .output(),
             )
             .await;
@@ -212,7 +212,6 @@ impl Tool for CodeExec {
                     let stdout = String::from_utf8_lossy(&output.stdout);
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     let code = output.status.code().unwrap_or(-1);
-                    let _ = tokio::fs::remove_dir_all(&temp_dir).await;
                     Ok(json!({
                         "ok": output.status.success(),
                         "data": {
@@ -224,14 +223,12 @@ impl Tool for CodeExec {
                     }))
                 }
                 Ok(Err(e)) => {
-                    let _ = tokio::fs::remove_dir_all(&temp_dir).await;
                     Ok(json!({
                         "ok": false,
                         "error": format!("execution failed: {}", e)
                     }))
                 }
                 Err(_) => {
-                    let _ = tokio::fs::remove_dir_all(&temp_dir).await;
                     Ok(json!({
                         "ok": false,
                         "error": format!("execution timed out after {}s", self.timeout_seconds)
@@ -239,12 +236,20 @@ impl Tool for CodeExec {
                 }
             }
         }
+        // TempDir is automatically cleaned up when it goes out of scope
     }
 }
 
 fn truncate_output(s: &str) -> String {
     if s.len() > MAX_OUTPUT_SIZE {
-        let mut truncated = s[.. MAX_OUTPUT_SIZE].to_string();
+        // Find a safe char boundary at or before MAX_OUTPUT_SIZE bytes.
+        let end = s
+            .char_indices()
+            .take_while(|(i, _)| *i <= MAX_OUTPUT_SIZE)
+            .last()
+            .map(|(i, c)| i + c.len_utf8())
+            .unwrap_or(MAX_OUTPUT_SIZE.min(s.len()));
+        let mut truncated = s[..end].to_string();
         truncated.push_str("\n... (output truncated)");
         truncated
     } else {
