@@ -2,9 +2,9 @@ use std::time::Duration;
 
 use rig::{completion::ToolDefinition, tool::Tool};
 use serde_json::{Value, json};
+use tempfile::TempDir;
 use tokio::process::Command;
 use tracing;
-use tempfile::TempDir;
 
 const MAX_OUTPUT_SIZE: usize = 64 * 1024; // 64KB max output
 
@@ -136,7 +136,7 @@ impl Tool for CodeExec {
                 .arg(&source_file)
                 .arg("-o")
                 .arg(temp_path.join("main"))
-                .current_dir(&temp_path)
+                .current_dir(temp_path)
                 .output()
                 .await;
 
@@ -155,7 +155,7 @@ impl Tool for CodeExec {
                     let run_result = tokio::time::timeout(
                         Duration::from_secs(self.timeout_seconds),
                         Command::new(temp_path.join("main"))
-                            .current_dir(&temp_path)
+                            .current_dir(temp_path)
                             .output(),
                     )
                     .await;
@@ -175,26 +175,20 @@ impl Tool for CodeExec {
                                 }
                             }))
                         }
-                        Ok(Err(e)) => {
-                            Ok(json!({
-                                "ok": false,
-                                "error": format!("execution failed: {}", e)
-                            }))
-                        }
-                        Err(_) => {
-                            Ok(json!({
-                                "ok": false,
-                                "error": format!("execution timed out after {}s", self.timeout_seconds)
-                            }))
-                        }
+                        Ok(Err(e)) => Ok(json!({
+                            "ok": false,
+                            "error": format!("execution failed: {}", e)
+                        })),
+                        Err(_) => Ok(json!({
+                            "ok": false,
+                            "error": format!("execution timed out after {}s", self.timeout_seconds)
+                        })),
                     }
                 }
-                Err(e) => {
-                    Ok(json!({
-                        "ok": false,
-                        "error": format!("failed to start compiler: {}", e)
-                    }))
-                }
+                Err(e) => Ok(json!({
+                    "ok": false,
+                    "error": format!("failed to start compiler: {}", e)
+                })),
             }
         } else {
             // Python / JavaScript: run directly
@@ -202,7 +196,7 @@ impl Tool for CodeExec {
                 Duration::from_secs(self.timeout_seconds),
                 Command::new(interpreter)
                     .arg(&source_file)
-                    .current_dir(&temp_path)
+                    .current_dir(temp_path)
                     .output(),
             )
             .await;
@@ -222,18 +216,14 @@ impl Tool for CodeExec {
                         }
                     }))
                 }
-                Ok(Err(e)) => {
-                    Ok(json!({
-                        "ok": false,
-                        "error": format!("execution failed: {}", e)
-                    }))
-                }
-                Err(_) => {
-                    Ok(json!({
-                        "ok": false,
-                        "error": format!("execution timed out after {}s", self.timeout_seconds)
-                    }))
-                }
+                Ok(Err(e)) => Ok(json!({
+                    "ok": false,
+                    "error": format!("execution failed: {}", e)
+                })),
+                Err(_) => Ok(json!({
+                    "ok": false,
+                    "error": format!("execution timed out after {}s", self.timeout_seconds)
+                })),
             }
         }
         // TempDir is automatically cleaned up when it goes out of scope
@@ -249,7 +239,7 @@ fn truncate_output(s: &str) -> String {
             .last()
             .map(|(i, c)| i + c.len_utf8())
             .unwrap_or(MAX_OUTPUT_SIZE.min(s.len()));
-        let mut truncated = s[..end].to_string();
+        let mut truncated = s[.. end].to_string();
         truncated.push_str("\n... (output truncated)");
         truncated
     } else {

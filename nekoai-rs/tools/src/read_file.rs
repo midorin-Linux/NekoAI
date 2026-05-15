@@ -182,7 +182,7 @@ impl Tool for ReadFile {
                         .last()
                         .map(|(i, c)| i + c.len_utf8())
                         .unwrap_or(max_length.min(content.len()));
-                    let mut truncated = content[..end].to_string();
+                    let mut truncated = content[.. end].to_string();
                     truncated.push_str("\n... (file truncated)");
                     Ok(json!({
                         "ok": true,

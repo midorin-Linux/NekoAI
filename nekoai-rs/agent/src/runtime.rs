@@ -1,5 +1,4 @@
-use std::future::Future;
-use std::{pin::Pin, sync::Arc, time::Duration};
+use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 
 use anyhow::{Context, Result};
 use dashmap::DashMap;
@@ -797,7 +796,7 @@ fn parse_extracted_facts(raw: &str) -> Result<Vec<(String, Vec<String>)>> {
                 return None;
             }
 
-            parse_extracted_facts_json(&trimmed[start..=end])
+            parse_extracted_facts_json(&trimmed[start ..= end])
         })
         .ok_or_else(|| anyhow::anyhow!("failed to parse extracted facts JSON"))
 }

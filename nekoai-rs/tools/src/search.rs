@@ -5,12 +5,12 @@
 //! - `WebFetch`: Fetches and extracts readable text content from a URL.
 
 use std::net::IpAddr;
-use url::Url;
-use tokio::net::lookup_host;
 
 use rig::{completion::ToolDefinition, tool::Tool};
 use serde_json::{Value, json};
+use tokio::net::lookup_host;
 use tracing;
+use url::Url;
 
 const SEARCH_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
@@ -287,25 +287,25 @@ impl Tool for WebFetch {
             Ok(response) => {
                 // Check resolved IP of the final URL (post-redirect) for SSRF
                 let final_url = response.url().clone();
-                if let Some(host) = final_url.host_str() {
-                    if let Some(port) = final_url.port_or_known_default() {
-                        match lookup_host((host, port)).await {
-                            Ok(addrs) => {
-                                for addr in addrs {
-                                    if is_private_ip(&addr.ip()) {
-                                        return Ok(json!({
-                                            "ok": false,
-                                            "error": "access to private or internal URLs is not allowed"
-                                        }));
-                                    }
+                if let Some(host) = final_url.host_str()
+                    && let Some(port) = final_url.port_or_known_default()
+                {
+                    match lookup_host((host, port)).await {
+                        Ok(addrs) => {
+                            for addr in addrs {
+                                if is_private_ip(&addr.ip()) {
+                                    return Ok(json!({
+                                        "ok": false,
+                                        "error": "access to private or internal URLs is not allowed"
+                                    }));
                                 }
                             }
-                            Err(e) => {
-                                return Ok(json!({
-                                    "ok": false,
-                                    "error": format!("dns lookup failed for final url: {}", e)
-                                }));
-                            }
+                        }
+                        Err(e) => {
+                            return Ok(json!({
+                                "ok": false,
+                                "error": format!("dns lookup failed for final url: {}", e)
+                            }));
                         }
                     }
                 }
@@ -486,7 +486,7 @@ fn truncate_at_char_boundary(s: &str, max_len: usize) -> String {
         .last()
         .map(|(i, c)| i + c.len_utf8())
         .unwrap_or(max_len.min(s.len()));
-    s[..end].to_string()
+    s[.. end].to_string()
 }
 
 /// Simple HTML tag stripper for fallback.
@@ -534,7 +534,7 @@ fn urlencoding(input: &str) -> String {
     let mut result = String::with_capacity(input.len() * 3);
     for byte in input.bytes() {
         match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+            b'A' ..= b'Z' | b'a' ..= b'z' | b'0' ..= b'9' | b'-' | b'_' | b'.' | b'~' => {
                 result.push(byte as char);
             }
             b' ' => {
@@ -551,8 +551,12 @@ fn urlencoding(input: &str) -> String {
 /// Async check whether a URL resolves to any private/internal IPs or is otherwise invalid.
 async fn url_is_private_or_internal(url_str: &str) -> Result<bool, String> {
     let url = Url::parse(url_str).map_err(|e| format!("invalid url: {}", e))?;
-    let host = url.host_str().ok_or_else(|| "missing host in url".to_string())?;
-    let port = url.port_or_known_default().ok_or_else(|| "unknown port".to_string())?;
+    let host = url
+        .host_str()
+        .ok_or_else(|| "missing host in url".to_string())?;
+    let port = url
+        .port_or_known_default()
+        .ok_or_else(|| "unknown port".to_string())?;
 
     // If host is an IP literal, check it directly.
     if let Ok(ip) = host.parse::<IpAddr>() {

@@ -111,15 +111,13 @@ async fn sse_handler(
 {
     let rx = state.agent.event_bus().subscribe();
     let stream = BroadcastStream::new(rx).filter_map(|result| match result {
-        Ok(event) => {
-            match serde_json::to_string(&event) {
-                Ok(json) => Some(Ok(Event::default().data(json))),
-                Err(e) => {
-                    tracing::error!(target: "http_server", error = %e, "failed to serialize event");
-                    None
-                }
+        Ok(event) => match serde_json::to_string(&event) {
+            Ok(json) => Some(Ok(Event::default().data(json))),
+            Err(e) => {
+                tracing::error!(target: "http_server", error = %e, "failed to serialize event");
+                None
             }
-        }
+        },
         Err(tokio_stream::wrappers::errors::BroadcastStreamRecvError::Lagged(n)) => {
             tracing::warn!(target: "http_server", skipped = n, "SSE client lagged");
             None
