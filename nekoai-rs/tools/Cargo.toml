@@ -5,6 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+async-trait.workspace = true
+nekoai-config.workspace = true
 nekoai-domain.workspace = true
 rig.workspace = true
 serde.workspace = true
@@ -16,3 +18,7 @@ tokio-retry.workspace = true
 chrono.workspace = true
 reqwest.workspace = true
 scraper.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+tempfile.workspace = true
+url = "2"

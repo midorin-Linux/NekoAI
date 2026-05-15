@@ -100,6 +100,13 @@ impl SessionManager {
             .clone()
     }
 
+    pub fn all_keys(&self) -> Vec<SessionKey> {
+        self.sessions
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect()
+    }
+
     pub fn get(&self, session_key: &SessionKey) -> Result<Arc<Mutex<Session>>> {
         self.sessions
             .get(session_key)

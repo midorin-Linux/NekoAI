@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 
 use anyhow::{Context, Result};
 use dashmap::DashMap;
@@ -7,14 +7,19 @@ use nekoai_domain::agent::{
     runtime::{CallerContext, with_caller_context},
     session::SessionKey,
 };
+use nekoai_infra::{
+    event_bus::{AgentEvent, EventBus},
+    metrics::Metrics,
+    web_ui_agent::WebUiAgent,
+};
 use nekoai_memory::{
     short_term::{Role, ShortTermEntry},
     store::MemoryStore,
 };
 use rig::{
-    completion::{Message, Prompt},
+    completion::{Message, Prompt, ToolDefinition},
     tool::{
-        ToolDyn,
+        ToolDyn, ToolError,
         server::{ToolServer, ToolServerHandle},
     },
 };
@@ -88,6 +93,8 @@ pub struct AgentRuntime {
     accumulated_conversations: Arc<DashMap<SessionKey, String>>,
     message_since_last_extraction: Arc<DashMap<SessionKey, usize>>,
     long_term_extraction_interval: usize,
+    event_bus: EventBus,
+    metrics: Metrics,
 }
 
 impl AgentRuntime {
@@ -160,15 +167,17 @@ impl AgentRuntime {
 
         let semaphore = Arc::new(Semaphore::new(EXTRACTION_CONCURRENT_LIMIT));
 
+        let event_bus = EventBus::new(256);
+        let metrics = Metrics::new();
+
         let summarizing = Arc::new(DashMap::new());
 
         let provider_clone = conversation_model.clone();
         let memory_store_clone = memory_store.clone();
         let conversation_model_name_clone = conversation_model_name.clone();
         let conversation_model_parameters_clone = conversation_model_parameters.clone();
-        // let summarization_model_name_clone = summarization_model_name.clone();
-        // let summarization_model_parameters_clone = summarization_model_parameters.clone();
         let sem_clone = semaphore.clone();
+        let eb_clone = event_bus.clone();
 
         tokio::spawn(async move {
             info!("extraction task processor started");
@@ -179,6 +188,7 @@ impl AgentRuntime {
                 conversation_model_name_clone,
                 conversation_model_parameters_clone,
                 sem_clone,
+                eb_clone,
             )
             .await;
         });
@@ -213,6 +223,8 @@ impl AgentRuntime {
             accumulated_conversations,
             message_since_last_extraction,
             long_term_extraction_interval,
+            event_bus,
+            metrics,
         })
     }
 
@@ -269,10 +281,18 @@ impl AgentRuntime {
         user_id: Option<String>,
         user_input: String,
     ) -> Result<AgentResponse> {
+        let start = std::time::Instant::now();
+        self.metrics.record_message();
+
         let caller_context = CallerContext {
             user_id: user_id.as_ref().and_then(|id| id.parse::<u64>().ok()),
             guild_id: session_key.guild_id.map(|id| id.get()),
         };
+
+        self.event_bus.publish(AgentEvent::MessageReceived {
+            session_key: session_key.clone(),
+            content: user_input.clone(),
+        });
 
         info!(
             session = %session_key.channel_id,
@@ -286,6 +306,12 @@ impl AgentRuntime {
         debug!(turn_count = session.turns.len(), "session loaded");
 
         let recalled = self.memory_store.recall(&session_key, &user_input).await;
+
+        self.event_bus.publish(AgentEvent::MemoryRecalled {
+            session_key: session_key.clone(),
+            mid_count: recalled.mid_term.len(),
+            long_count: recalled.long_term.len(),
+        });
 
         let context = self
             .context_manager
@@ -316,6 +342,10 @@ impl AgentRuntime {
             .map(jitter)
             .take(5);
 
+        self.event_bus.publish(AgentEvent::ThinkingStarted {
+            session_key: session_key.clone(),
+        });
+
         let cm = self.conversation_model.clone();
         let model_name = self.conversation_model_name.clone();
         let model_params = self.conversation_model_parameters.clone();
@@ -323,7 +353,7 @@ impl AgentRuntime {
         let tool_handle = self.tool_server_handle.clone();
         let user_message = context.user_message.clone();
 
-        let result = with_caller_context(caller_context, async {
+        let result = match with_caller_context(caller_context, async {
             Retry::spawn(retry_strategy, || {
                 let cm = cm.clone();
                 let mn = model_name.clone();
@@ -343,8 +373,26 @@ impl AgentRuntime {
             })
             .await
         })
-        .await?;
-        info!(response_len = result.len(), "received model response");
+        .await
+        {
+            Ok(r) => {
+                self.metrics.record_latency(start.elapsed());
+                info!(response_len = r.len(), "received model response");
+                r
+            }
+            Err(e) => {
+                self.event_bus.publish(AgentEvent::ErrorOccurred {
+                    session_key: session_key.clone(),
+                    error: format!("{}", e),
+                });
+                return Err(e.into());
+            }
+        };
+
+        self.event_bus.publish(AgentEvent::ResponseCompleted {
+            session_key: session_key.clone(),
+            full_response: result.clone(),
+        });
 
         self.memory_store
             .push_short_term(&session_key, &user_input, result.as_str());
@@ -355,12 +403,17 @@ impl AgentRuntime {
         {
             let this = self.clone();
             let key = session_key.clone();
+            let eb = self.event_bus.clone();
             tokio::spawn(async move {
                 if let Err(error) = this
                     .promote_short_term_to_mid_term(&key, "compression_threshold")
                     .await
                 {
                     warn!(session = %key.channel_id, error = %error, "background promote failed");
+                } else {
+                    eb.publish(AgentEvent::MemoryPromoted {
+                        session_key: key.clone(),
+                    });
                 }
                 this.summarizing.remove(&key);
             });
@@ -494,7 +547,10 @@ impl AgentRuntime {
     }
 
     pub async fn add_tool(&self, tool: impl ToolDyn + 'static) {
-        if let Err(e) = self.tool_server_handle.add_tool(tool).await {
+        let instrumented = InstrumentedTool {
+            inner: Box::new(tool),
+        };
+        if let Err(e) = self.tool_server_handle.add_tool(instrumented).await {
             warn!(error = %e, "failed to register tool");
         } else {
             info!("tool registered successfully");
@@ -509,6 +565,65 @@ impl AgentRuntime {
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
         info!("agent runtime shutdown complete");
+    }
+
+    pub fn event_bus(&self) -> &EventBus {
+        &self.event_bus
+    }
+
+    pub fn metrics(&self) -> &Metrics {
+        &self.metrics
+    }
+}
+
+#[async_trait::async_trait]
+impl WebUiAgent for AgentRuntime {
+    fn event_bus(&self) -> &EventBus {
+        &self.event_bus
+    }
+
+    fn metrics(&self) -> &Metrics {
+        &self.metrics
+    }
+
+    async fn list_sessions(&self) -> Vec<SessionKey> {
+        self.session_manager.all_keys()
+    }
+
+    async fn submit(
+        &self,
+        session_key: SessionKey,
+        user_id: Option<String>,
+        content: String,
+    ) -> anyhow::Result<String> {
+        let resp = AgentRuntime::submit(self, session_key, user_id, content).await?;
+        Ok(resp.content)
+    }
+}
+
+/// Wrapper around `ToolDyn` for future instrumentation.
+/// TODO: Add `ToolCalled` / `ToolResult` events when Rig SDK supports caller-context passthrough.
+struct InstrumentedTool {
+    inner: Box<dyn ToolDyn>,
+}
+
+impl ToolDyn for InstrumentedTool {
+    fn name(&self) -> String {
+        self.inner.name()
+    }
+
+    fn definition<'a>(
+        &'a self,
+        prompt: String,
+    ) -> Pin<Box<dyn Future<Output = ToolDefinition> + Send + 'a>> {
+        self.inner.definition(prompt)
+    }
+
+    fn call<'a>(
+        &'a self,
+        args: String,
+    ) -> Pin<Box<dyn Future<Output = Result<String, ToolError>> + Send + 'a>> {
+        self.inner.call(args)
     }
 }
 
@@ -542,6 +657,7 @@ fn escape_xml(input: &str) -> String {
         .replace('\'', "&apos;")
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn extract_and_store_long_term_facts(
     provider: Arc<OpenAICompatibleAdapter>,
     memory_store: Arc<MemoryStore>,
@@ -550,6 +666,7 @@ async fn extract_and_store_long_term_facts(
     session_key: SessionKey,
     user_id: Option<String>,
     conversation_batch: String,
+    event_bus: EventBus,
 ) -> Result<()> {
     let prompt = format!(
         "<long_term_extraction_task>\n  <instruction>Extract ALL important information from the following conversation in JSON format, which should be referenced in future conversations. Include user preferences, facts, decisions, and any other key information. Extract multiple distinct facts if multiple topics are discussed. Otherwise, return an empty array.</instruction>\n  <output_format>[{{\"fact\":\" ... \",\"tags\":[\" ... \"]}}]</output_format>\n  <conversation>{}</conversation>\n</long_term_extraction_task>",
@@ -600,6 +717,14 @@ async fn extract_and_store_long_term_facts(
     }
 
     let fact_count = facts.len();
+
+    for (fact, _tags) in &facts {
+        event_bus.publish(AgentEvent::MemoryExtracted {
+            session_key: session_key.clone(),
+            fact: fact.clone(),
+        });
+    }
+
     memory_store
         .extract_long_term(&session_key, user_id.as_deref(), facts)
         .await
@@ -621,6 +746,7 @@ async fn extraction_task_processor(
     model: String,
     parameters: Parameters,
     semaphore: Arc<Semaphore>,
+    event_bus: EventBus,
 ) {
     while let Some(task) = rx.recv().await {
         let provider = provider.clone();
@@ -628,6 +754,7 @@ async fn extraction_task_processor(
         let model = model.clone();
         let parameters = parameters.clone();
         let sem = semaphore.clone();
+        let eb = event_bus.clone();
 
         tokio::spawn(async move {
             let _permit = match sem.acquire().await {
@@ -646,6 +773,7 @@ async fn extraction_task_processor(
                 task.session_key,
                 task.user_id,
                 task.conversation_batch,
+                eb,
             )
             .await
             {

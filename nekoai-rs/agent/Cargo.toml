@@ -6,10 +6,12 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+async-trait.workspace = true
 chrono.workspace = true
 dashmap.workspace = true
 nekoai-config.workspace = true
 nekoai-domain.workspace = true
+nekoai-infra.workspace = true
 nekoai-memory.workspace = true
 rig.workspace = true
 serde.workspace = true

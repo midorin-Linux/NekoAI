@@ -9,5 +9,6 @@ anyhow.workspace = true
 nekoai-config.workspace = true
 dialoguer.workspace = true
 tracing.workspace = true
-serde_json.workspace = true
 colored.workspace = true
+serde_json.workspace = true
+toml.workspace = true

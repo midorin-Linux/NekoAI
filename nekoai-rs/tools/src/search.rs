@@ -8,9 +8,21 @@ use std::net::IpAddr;
 
 use rig::{completion::ToolDefinition, tool::Tool};
 use serde_json::{Value, json};
+use tokio::net::lookup_host;
 use tracing;
+use url::Url;
 
 const SEARCH_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+/// Build a reqwest Client with a private-url-validating redirect policy.
+fn ssrf_safe_client() -> reqwest::Client {
+    // Do not follow redirects automatically; we'll validate and decide how to handle them.
+    reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .user_agent(SEARCH_USER_AGENT)
+        .build()
+        .expect("failed to build reqwest client")
+}
 
 /// Search the web using SearXNG meta search engine.
 pub struct SearxngSearch {
@@ -23,7 +35,7 @@ impl SearxngSearch {
     #[allow(dead_code)]
     pub fn new(base_url: String, max_results: u64) -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: ssrf_safe_client(),
             base_url,
             max_results,
         }
@@ -183,7 +195,7 @@ impl WebFetch {
     #[allow(dead_code)]
     pub fn new(max_length: usize) -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: ssrf_safe_client(),
             max_length,
         }
     }
@@ -245,11 +257,21 @@ impl Tool for WebFetch {
             }));
         }
 
-        if is_private_url(&url) {
-            return Ok(json!({
-                "ok": false,
-                "error": "access to private or internal URLs is not allowed"
-            }));
+        // Pre-fetch: perform async DNS resolution and IP checks to prevent SSRF.
+        match url_is_private_or_internal(&url).await {
+            Ok(true) => {
+                return Ok(json!({
+                    "ok": false,
+                    "error": "access to private or internal URLs is not allowed"
+                }));
+            }
+            Err(e) => {
+                return Ok(json!({
+                    "ok": false,
+                    "error": format!("url validation failed: {}", e)
+                }));
+            }
+            Ok(false) => {}
         }
 
         let max_length = args
@@ -263,6 +285,31 @@ impl Tool for WebFetch {
 
         match self.client.get(&url).send().await {
             Ok(response) => {
+                // Check resolved IP of the final URL (post-redirect) for SSRF
+                let final_url = response.url().clone();
+                if let Some(host) = final_url.host_str()
+                    && let Some(port) = final_url.port_or_known_default()
+                {
+                    match lookup_host((host, port)).await {
+                        Ok(addrs) => {
+                            for addr in addrs {
+                                if is_private_ip(&addr.ip()) {
+                                    return Ok(json!({
+                                        "ok": false,
+                                        "error": "access to private or internal URLs is not allowed"
+                                    }));
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            return Ok(json!({
+                                "ok": false,
+                                "error": format!("dns lookup failed for final url: {}", e)
+                            }));
+                        }
+                    }
+                }
+
                 let status = response.status().as_u16();
                 if !response.status().is_success() {
                     return Ok(json!({
@@ -277,7 +324,15 @@ impl Tool for WebFetch {
                     .get(reqwest::header::CONTENT_TYPE)
                     .and_then(|v| v.to_str().ok())
                     .unwrap_or("")
-                    .to_string();
+                    .to_lowercase();
+
+                // Reject non-HTML content types
+                if !content_type.is_empty() && !content_type.starts_with("text/html") {
+                    return Ok(json!({
+                        "ok": false,
+                        "error": format!("unsupported content type: {}. Expected text/html", content_type)
+                    }));
+                }
 
                 // Get raw bytes for HTML parsing
                 match response.bytes().await {
@@ -493,53 +548,57 @@ fn urlencoding(input: &str) -> String {
     result
 }
 
-/// Check if a URL targets a private or internal network address (SSRF prevention).
-fn is_private_url(url: &str) -> bool {
-    let host = match url
-        .trim_start_matches("https://")
-        .trim_start_matches("http://")
-        .split('/')
-        .next()
-    {
-        Some(h) => h,
-        None => return false,
-    };
+/// Async check whether a URL resolves to any private/internal IPs or is otherwise invalid.
+async fn url_is_private_or_internal(url_str: &str) -> Result<bool, String> {
+    let url = Url::parse(url_str).map_err(|e| format!("invalid url: {}", e))?;
+    let host = url
+        .host_str()
+        .ok_or_else(|| "missing host in url".to_string())?;
+    let port = url
+        .port_or_known_default()
+        .ok_or_else(|| "unknown port".to_string())?;
 
-    // Strip port number
-    let host = host.split(':').next().unwrap_or(host);
-
-    // Check well-known private hostnames
-    let lower = host.to_ascii_lowercase();
-    if lower == "localhost" || lower == "127.0.0.1" || lower == "::1" || lower == "[::1]" {
-        return true;
+    // If host is an IP literal, check it directly.
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        return Ok(is_private_ip(&ip));
     }
 
-    // Try to parse as IP address
-    if let Ok(ip) = host.parse::<IpAddr>() {
-        match ip {
-            IpAddr::V4(v4) => {
-                if v4.is_loopback()
-                    || v4.is_private()
-                    || v4.is_link_local()
-                    || v4.is_unspecified()
-                    || v4.is_multicast()
-                {
-                    return true;
-                }
-            }
-            IpAddr::V6(v6) => {
-                if v6.is_loopback() || v6.is_unspecified() || v6.is_multicast() {
-                    return true;
-                }
-            }
+    // Resolve DNS to IPs and check each address.
+    let lookup_target = (host, port);
+    let addrs = lookup_host(lookup_target)
+        .await
+        .map_err(|e| format!("dns lookup failed: {}", e))?;
+
+    for sock in addrs {
+        if is_private_ip(&sock.ip()) {
+            return Ok(true);
         }
     }
+    Ok(false)
+}
 
-    // For hostnames, check common private DNS suffixes
-    if lower.ends_with(".internal") || lower.ends_with(".local") || lower.ends_with(".localdomain")
-    {
-        return true;
+/// Check if an IP address is private or internal.
+fn is_private_ip(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            v4.is_loopback()
+                || v4.is_private()
+                || v4.is_link_local()
+                || v4.is_unspecified()
+                || v4.is_multicast()
+        }
+        IpAddr::V6(v6) => {
+            // loopback, unspecified, multicast
+            if v6.is_loopback() || v6.is_unspecified() || v6.is_multicast() {
+                return true;
+            }
+            // Unique local addresses fc00::/7 (first byte 0xfc or 0xfd)
+            let octets = v6.octets();
+            let first = octets[0];
+            if (first & 0xfe) == 0xfc {
+                return true;
+            }
+            false
+        }
     }
-
-    false
 }
