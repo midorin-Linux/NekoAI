@@ -19,6 +19,6 @@ chrono.workspace = true
 reqwest.workspace = true
 scraper.workspace = true
 tokio.workspace = true
+url.workspace = true
 uuid.workspace = true
 tempfile.workspace = true
-url = "2"
