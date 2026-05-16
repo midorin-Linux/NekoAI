@@ -97,8 +97,8 @@ impl McpClient {
                 ));
             }
         };
-        let params = CallToolRequestParams::new(Cow::Owned(name.to_string()))
-            .with_arguments(arguments);
+        let params =
+            CallToolRequestParams::new(Cow::Owned(name.to_string())).with_arguments(arguments);
         self.service
             .peer()
             .call_tool(params)
