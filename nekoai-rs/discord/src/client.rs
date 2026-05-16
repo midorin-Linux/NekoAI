@@ -412,21 +412,31 @@ impl DiscordClient {
             match McpClient::connect(mcp_config).await {
                 Ok(client) => {
                     let client = Arc::new(client);
-                    let defs = client.tool_defs().await;
-                    info!(
-                        mcp_server = mcp_config.name,
-                        tool_count = defs.len(),
-                        "MCP server connected"
-                    );
-                    for def in defs {
-                        let tool_name = def.name.clone();
-                        let wrapper = McpToolWrapper::new(client.clone(), def);
-                        runtime_for_tools.add_tool(wrapper).await;
-                        info!(
-                            mcp_server = mcp_config.name,
-                            tool = %tool_name,
-                            "MCP tool registered"
-                        );
+                    match client.tool_defs().await {
+                        Ok(defs) => {
+                            info!(
+                                mcp_server = mcp_config.name,
+                                tool_count = defs.len(),
+                                "MCP server connected"
+                            );
+                            for def in defs {
+                                let tool_name = def.name.clone();
+                                let wrapper = McpToolWrapper::new(client.clone(), def);
+                                runtime_for_tools.add_tool(wrapper).await;
+                                info!(
+                                    mcp_server = mcp_config.name,
+                                    tool = %tool_name,
+                                    "MCP tool registered"
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            warn!(
+                                mcp_server = mcp_config.name,
+                                error = %e,
+                                "failed to list MCP tools"
+                            );
+                        }
                     }
                 }
                 Err(e) => {
