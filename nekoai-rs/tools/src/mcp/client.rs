@@ -1,85 +1,84 @@
-use std::sync::Arc;
+use std::{borrow::Cow, process::Stdio, sync::Arc};
 
 use nekoai_config::loader::McpServerConfig;
 use rig::{completion::ToolDefinition, tool::Tool};
+use rmcp::{
+    model::{CallToolRequestParams, Tool as McpTool},
+    service::{RoleClient, RunningService, ServiceExt},
+    transport::{StreamableHttpClientTransport, TokioChildProcess},
+};
 use serde_json::{Value, json};
 use tokio::sync::RwLock;
 use tracing::info;
 
-use super::transport::{McpToolDef, McpTransport, SseTransport, StdioTransport};
-
 /// An MCP client that connects to an MCP server and exposes its tools.
 pub struct McpClient {
     name: String,
-    transport: Arc<dyn McpTransport>,
-    tools: Arc<RwLock<Vec<McpToolDef>>>,
-    connected: Arc<RwLock<bool>>,
+    service: Arc<RunningService<RoleClient, ()>>,
+    tools: Arc<RwLock<Option<Vec<McpTool>>>>,
 }
 
 impl McpClient {
     /// Connect to an MCP server based on its configuration.
     pub async fn connect(config: &McpServerConfig) -> Result<Self, String> {
-        let transport: Arc<dyn McpTransport> = match config.transport.as_str() {
+        let service = match config.transport.as_str() {
             "stdio" => {
                 let command = config
                     .command
                     .as_ref()
                     .ok_or_else(|| "stdio transport requires 'command'".to_string())?;
                 let args: Vec<String> = config.args.clone().unwrap_or_default();
-                Arc::new(
-                    StdioTransport::spawn(command, &args)
-                        .await
-                        .map_err(|e| format!("MCP '{}' stdio spawn failed: {}", config.name, e))?,
-                )
+                let mut cmd = tokio::process::Command::new(command);
+                cmd.args(args);
+                let (child, _stderr) = TokioChildProcess::builder(cmd)
+                    .stderr(Stdio::inherit())
+                    .spawn()
+                    .map_err(|e| format!("MCP '{}' stdio spawn failed: {}", config.name, e))?;
+                ().serve(child).await
             }
             "sse" => {
                 let url = config
                     .url
                     .as_ref()
                     .ok_or_else(|| "sse transport requires 'url'".to_string())?;
-                Arc::new(SseTransport::new(url.clone()))
+                let transport = StreamableHttpClientTransport::from_uri(url.clone());
+                ().serve(transport).await
             }
             other => return Err(format!("unsupported MCP transport: {}", other)),
-        };
+        }
+        .map_err(|e| format!("MCP '{}' init failed: {}", config.name, e))?;
 
         let client = Self {
             name: config.name.clone(),
-            transport,
-            tools: Arc::new(RwLock::new(Vec::new())),
-            connected: Arc::new(RwLock::new(false)),
+            service: Arc::new(service),
+            tools: Arc::new(RwLock::new(None)),
         };
 
-        client.initialize().await?;
-        Ok(client)
-    }
-
-    /// Initialize the MCP connection and fetch available tools.
-    pub async fn initialize(&self) -> Result<(), String> {
-        self.transport
-            .initialize()
-            .await
-            .map_err(|e| format!("MCP '{}' init failed: {}", self.name, e))?;
-
-        let tools = self
-            .transport
-            .list_tools()
-            .await
-            .map_err(|e| format!("MCP '{}' list_tools failed: {}", self.name, e))?;
-
+        let tools = client.tool_defs().await?;
         info!(
-            mcp_server = self.name,
+            mcp_server = client.name,
             tool_count = tools.len(),
             "MCP server connected"
         );
 
-        *self.tools.write().await = tools;
-        *self.connected.write().await = true;
-        Ok(())
+        Ok(client)
     }
 
     /// Get the list of tool definitions.
-    pub async fn tool_defs(&self) -> Vec<McpToolDef> {
-        self.tools.read().await.clone()
+    pub async fn tool_defs(&self) -> Result<Vec<McpTool>, String> {
+        if let Some(cached) = self.tools.read().await.clone() {
+            return Ok(cached);
+        }
+
+        let tools = self
+            .service
+            .peer()
+            .list_all_tools()
+            .await
+            .map_err(|e| format!("MCP '{}' list_tools failed: {}", self.name, e))?;
+
+        *self.tools.write().await = Some(tools.clone());
+        Ok(tools)
     }
 
     /// Get the server name.
@@ -87,14 +86,26 @@ impl McpClient {
         &self.name
     }
 
-    /// Check if connected.
-    pub async fn is_connected(&self) -> bool {
-        *self.connected.read().await
-    }
-
     /// Call a tool by name with the given arguments.
     pub async fn call_tool(&self, name: &str, args: Value) -> Result<Value, String> {
-        self.transport.call_tool(name, args).await
+        let arguments = match args {
+            Value::Object(map) => map,
+            _ => {
+                return Err(format!(
+                    "MCP '{}' call_tool expects object arguments",
+                    self.name
+                ));
+            }
+        };
+        let params = CallToolRequestParams::new(Cow::Owned(name.to_string()))
+            .with_arguments(arguments);
+        self.service
+            .peer()
+            .call_tool(params)
+            .await
+            .map(serde_json::to_value)
+            .map_err(|e| format!("MCP '{}' call_tool failed: {}", self.name, e))?
+            .map_err(|e| format!("MCP '{}' call_tool serialize failed: {}", self.name, e))
     }
 }
 
@@ -102,11 +113,11 @@ impl McpClient {
 pub struct McpToolWrapper {
     server_name: String,
     client: Arc<McpClient>,
-    def: McpToolDef,
+    def: McpTool,
 }
 
 impl McpToolWrapper {
-    pub fn new(client: Arc<McpClient>, def: McpToolDef) -> Self {
+    pub fn new(client: Arc<McpClient>, def: McpTool) -> Self {
         let server_name = client.name().to_string();
         Self {
             server_name,
@@ -130,8 +141,12 @@ impl Tool for McpToolWrapper {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: self.name(),
-            description: format!("[MCP: {}] {}", self.server_name, self.def.description),
-            parameters: self.def.input_schema.clone(),
+            description: format!(
+                "[MCP: {}] {}",
+                self.server_name,
+                self.def.description.as_deref().unwrap_or("")
+            ),
+            parameters: self.def.schema_as_json_value(),
         }
     }
 
@@ -139,7 +154,7 @@ impl Tool for McpToolWrapper {
         tracing::info!(
             target: "nekoai-tools",
             mcp_server = self.server_name,
-            tool = self.def.name,
+            tool = %self.def.name,
             "MCP tool called"
         );
 
