@@ -374,8 +374,6 @@ pub struct Config {
     #[serde(default)]
     pub tools: ToolPermissions,
     #[serde(default)]
-    pub mcp_servers: Vec<McpServerConfig>,
-    #[serde(default)]
     pub web_ui: WebUiConfig,
 }
 

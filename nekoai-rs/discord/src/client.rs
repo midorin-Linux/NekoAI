@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 use nekoai_agent::runtime::AgentRuntime;
-use nekoai_config::loader::Config;
+use nekoai_config::loader::{Config, McpServerConfig};
 use nekoai_tools::{
     discord::{
         channel::{
@@ -50,6 +50,7 @@ impl DiscordClient {
         guild_id: u64,
         agent_runtime: AgentRuntime,
         config: &Config,
+        mcp_servers: &[McpServerConfig],
     ) -> Result<Self> {
         info!(guild_id, "creating discord client");
         let spinner = ProgressBar::new_spinner();
@@ -408,7 +409,7 @@ impl DiscordClient {
         // - read_file: パーミッション設計の再検討が必要
 
         // MCP server tools
-        for mcp_config in &config.mcp_servers {
+        for mcp_config in mcp_servers {
             match McpClient::connect(mcp_config).await {
                 Ok(client) => {
                     let client = Arc::new(client);

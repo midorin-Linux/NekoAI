@@ -2033,6 +2033,7 @@ dependencies = [
  "config",
  "secrecy 0.10.3",
  "serde",
+ "serde_json",
  "tracing",
  "zeroize",
 ]

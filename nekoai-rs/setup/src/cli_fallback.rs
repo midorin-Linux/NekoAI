@@ -69,7 +69,6 @@ pub fn make_config(
             code_exec_sandbox: Default::default(),
             read_file_dirs: Default::default(),
         },
-        mcp_servers: Vec::new(),
         web_ui: WebUiConfig::default(),
     }
 }

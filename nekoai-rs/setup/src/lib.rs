@@ -6,6 +6,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use nekoai_config::loader::Config;
+use nekoai_config::mcp_config;
 use tracing::{info, warn};
 
 /// Environment variable names for configuration (preferred over CLI flags).
@@ -23,6 +24,7 @@ pub async fn run_setup_wizard() -> Result<Config> {
     info!("starting interactive setup wizard");
     let config = wizard::run_wizard()?;
     config_writer::save_config(&config)?;
+    mcp_config::save_mcp_servers(&[])?;
     info!("setup wizard completed successfully");
     Ok(config)
 }
