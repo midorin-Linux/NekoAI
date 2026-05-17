@@ -6,174 +6,147 @@
 
 ## 主な構成
 
-- `store.rs`: 3 層統合インターフェース（`MemoryStore`）
-- `short_term.rs`: セッション内インメモリ記憶（`DashMap`）
-- `mid_term.rs`: 会話サマリー保存・検索・保持期間クリーンアップ
-- `long_term.rs`: 重要事実保存・検索・削除
-- `embedding.rs`: 埋め込み生成（OpenAI 互換 + Mock フォールバック）
-- `vector_db/mod.rs`: ベクトル DB 抽象インターフェース
-- `vector_db/qdrant.rs`: Qdrant 実装
-- `vector_db/inmemory.rs`: インメモリ実装（テスト用途）
+- `store.rs` (279行): 3 層統合インターフェース（`MemoryStore`）
+- `short_term.rs` (84行): セッション内インメモリ記憶（`DashMap`、`Role::User/Assistant/Tool`）
+- `mid_term.rs` (145行): 会話サマリー保存・検索・保持期間クリーンアップ
+- `long_term.rs` (227行): 重要事実保存・検索・削除（`search_by_guild`, `search_by_user` 対応）
+- `embedding.rs` (125行): 埋め込み生成（OpenAI 互換 + Mock フォールバック、5回リトライ）
+- `vector_db/mod.rs` (58行): ベクトル DB 抽象インターフェース（`VectorDbClient` trait）
+- `vector_db/qdrant.rs` (360行): Qdrant 実装（`session_scope_filter`、コサイン類似度）
+- `vector_db/inmemory.rs` (233行): インメモリ実装（テスト用途、コサイン類似度 + フィルタ評価）
 
 ## 初期化ワークフロー（`MemoryStore::new` + `initialize`）
 
 1. `&AppConfig` から設定を読み込み
-   - `config.memory.short_term_max_entries`: 短期記憶上限
-   - `config.memory.vector_db.*`: Qdrant URL、API key、コレクション名
-   - `config.memory.mid_term_retention_days`: 中期記憶保持期間
-   - `config.memory.mid_term_top_k` / `config.memory.long_term_top_k`: 検索結果数
-   - `config.provider.embedding_model.*`: 埋め込みモデル設定
 2. Qdrant クライアントを初期化（URL/API key）
-3. 埋め込みモデルを初期化
-   - 成功: `OpenAICompatibleEmbedder`
-   - 失敗: `MockEmbedder` へフォールバック（`warn` ログ出力）
+3. 埋め込みモデルを初期化:
+   - 成功: `OpenAICompatibleEmbedder`（Rig SDK + 指数バックオフリトライ）
+   - 失敗: `MockEmbedder` へフォールバック（`warn` ログ、FNV-1a ハッシュ + LCG 疑似乱数）
 4. `MidTermMemory` / `LongTermMemory` を構築
 5. `initialize().await` で両コレクションを `ensure_collection`
 
-### テスト用コンストラクタ（`with_components`）
+### テスト用コンストラクタ
 
-テストやモック環境で使用する別のコンストラクタです。既存の `mid_term`, `long_term`, `embedder` を直接注入できます。
+`with_components(mid_term, long_term, embedder, short_term_max, mid_term_top_k, long_term_top_k)`: 既存コンポーネントを直接注入可能。
 
 ## 短期記憶ワークフロー（`ShortTermMemory`）
 
-1. `push_turn(session_key, user, assistant)` で 2 エントリ（User/Assistant）を追加
-2. `max_entry` を超えた古いエントリは先頭から削除
-3. `get_messages` で会話ログ取得
-4. `clear` でセッション単位に削除
-5. `get_count(session_key)` で現在のエントリ数を取得
-
-短期記憶は完全にインメモリです。
-
-### Role タイプ
-
-短期記憶の各エントリは以下の役割を持ちます：
-- `User`: ユーザーの入力
-- `Assistant`: アシスタントの応答
-- `Tool`: ツール呼び出しの結果
+- `push_turn(session_key, user, assistant)`: 2 エントリ（User/Assistant）を同じタイムスタンプで追加、上限超過時は古いものから削除
+- `get_messages(session_key)`: `Vec<ShortTermEntry>` を返却（各エントリは `role`, `content`, `timestamp`）
+- `get_count(session_key)`: 現在のエントリ数
+- `clear(session_key)`: セッション単位に削除
+- Role: `User`, `Assistant`, `Tool` の 3 種類
 
 ## 想起ワークフロー（`MemoryStore::recall`）
 
 1. `recall(session_key, query)` を呼び出し
-2. 内部で `embedder.embed(query)` を実行してクエリの埋め込みを生成
-3. `mid_term.search_with_embedding(session_key, embedding, mid_term_top_k)` を実行
-4. `long_term.search_with_embedding(session_key, embedding, long_term_top_k)` を実行
-5. それぞれの結果を `RecalledMemory { mid_term, long_term }` で返却
-
-検索は session スコープ（`guild_id`, `channel_id`, `kind`）でフィルタされます。
+2. `embedder.embed(query)` でクエリの埋め込みを生成
+3. `tokio::join!` で中期/長期記憶を並行検索
+4. `RecalledMemory { mid_term, long_term }` を返却
 
 ### `should_summarize` メソッド
 
-短期記憶が `max_entry` に達したかどうかを判定し、中期記憶への昇格が必要かどうかを判断します。
+短期記憶のエントリ数が `max_entry` に達したかを判定。
 
-## 中期記憶ワークフロー（`promote_to_mid_term`）
+## 中期記憶ワークフロー
 
-1. 対象セッションの短期メッセージ群を取得
-2. 呼び出し元（`agent`）が生成した要約文を受け取る
-3. 要約文を埋め込み化
-4. `mid_term` コレクションへ upsert
+### `promote_to_mid_term`
+
+1. 要約文を受け取り埋め込み化
+2. `mid_term` コレクションへ upsert
+3. 短期記憶をクリア
+
+### `promote_to_mid_term_with_messages`
+
+同上だが、メッセージを外部から受け取る（`clear_session` 時に使用）。
 
 ### 保存される payload 構造
 
 - `content`: 要約文
-- `guild_id`: ギルド ID（DM の場合は `null`）
-- `channel_id`: チャンネル ID
-- `kind`: セッション種別（`guild`, `thread`, `dm`）
-- `created_at`: 作成時刻（Unix タイムスタンプ）
-- `message_count`: 元メッセージ数
+- `guild_id`, `channel_id`, `kind`, `created_at`, `message_count`
 
-保存後、短期記憶はクリアされます。
+### 検索
 
-## 長期記憶ワークフロー（`extract_long_term`）
+- `search(session_key, query, top_k)`: セッションスコープで検索（`session_scope_filter` 適用）
+- `search_with_embedding(session_key, embedding, top_k)`: プリエンベッド済み検索
 
-1. 呼び出し元から `facts: Vec<(String, Vec<String>)>` を受け取る（事実、タグ）
+### 保持期間クリーンアップ
+
+`MemoryStore::start_cleanup_job()` で 24 時間ごとに `delete_old_entries()` を実行し `created_at < cutoff` のデータを削除。
+
+## 長期記憶ワークフロー
+
+### `extract_long_term`
+
+1. `facts: Vec<(String, Vec<String>)>`（事実, タグ）を受け取り
 2. 各 fact を埋め込み化
 3. `long_term` コレクションへ upsert
-4. `user_id` があれば payload に格納
 
 ### 保存される payload 構造
 
-- `content`: 事実（fact）
-- `guild_id`: ギルド ID（DM の場合は `null`）
-- `channel_id`: チャンネル ID
-- `kind`: セッション種別（`guild`, `thread`, `dm`）
-- `created_at`: 作成時刻（Unix タイムスタンプ）
-- `tags`: タグ配列
-- `user_id`: ユーザー ID（オプション）
+- `content`: 事実
+- `guild_id`, `channel_id`, `kind`, `created_at`, `tags`, `user_id`（Option）
 
-## 長期記憶の検索・削除
+### 検索
 
-### 検索方法
+- `search(session_key, query, top_k)`: セッションスコープ
+- `search_by_guild(guild_id, query, top_k)`: ギルド全体
+- `search_by_user(user_id, query, top_k)`: ユーザー固有
+- `search_with_embedding(session_key, embedding, top_k)`: プリエンベッド済み
 
-- `search(session_key, query, top_k)`: セッションスコープで検索
-- `search_by_guild(guild_id, query, top_k)`: ギルド全体の事実を検索
-- `search_by_user(user_id, query, top_k)`: ユーザー固有の事実を検索
+### 削除
 
-### 削除方法
+- `delete(id)`: ID 指定削除
+- `delete_by_channel(channel_id)`: チャンネル単位削除
 
-- `delete(id)`: ID で指定された事実を削除
-- `delete_by_channel(channel_id)`: チャンネル単位で削除
-
-## 保持期間クリーンアップワークフロー
-
-`start_cleanup_job` はバックグラウンドタスクで日次実行します。
-
-1. 24 時間ごとの interval を起動
-2. `mid_term.delete_old_entries()` を実行
-3. `created_at < cutoff` のデータを削除
-4. 削除件数をログ出力
-
-**注意**: このタスクは `tokio::spawn` で非同期タスクとして実行されます。
-
-長期記憶は期限削除せず、明示削除のみです。
+長期記憶は自動期限削除なし、明示削除のみ。
 
 ## ベクトル DB ワークフロー
 
-`VectorDbClient` で以下操作を共通化しています。
-
-- `upsert`: ベクトルとペイロードを保存
-- `search`: ベクトル検索（類似度順にソート）
-- `delete`: ID で指定されたポイントを削除
-- `delete_by_filter`: フィルタ条件でポイントを削除
-- `ensure_collection`: コレクションの作成・存在確認
+`VectorDbClient` trait の操作:
+- `upsert(request)`: ベクトル + ペイロード保存
+- `search(request)`: ベクトル検索（フィルタ + top_k）
+- `delete(collection, id)`: ID 削除
+- `delete_by_filter(collection, filter)`: フィルタ削除
+- `ensure_collection(name, dim)`: コレクション作成/確認
 
 ### Qdrant 実装
 
-- `QdrantClient` は一度生成されたクライアントを保持（リクエストごとに生成ではない）
-- `SearchFilter` を Qdrant `Filter` に変換
-- `must/should` 条件を適用して検索
-- `session_scope_filter`: セッションスコープでフィルタリング（`guild_id`, `channel_id`, `kind`）
-- `session_kind_value`: `SessionKind` を文字列に変換（`guild` / `thread` / `dm`）
+- Qdrant ネイティブ `Filter` / `Condition` に変換
+- `session_scope_filter`: `guild_id` + `channel_id` + `kind` でフィルタリング
+- リトライ戦略: 指数バックオフ（100ms ベース、10s 最大、jitter、5回）
+- `SearchPointsBuilder` を使用
 
 ### InMemory 実装
 
-- テスト用途の簡易実装
-- コサイン類似度でランキング
-- `SearchFilter` の `Match/Range` をローカル評価
+- コサイン類似度（事前計算済みノルム）でランキング
+- `must`/`should` 条件をローカル評価
+- `Default` trait 実装
 
 ## 埋め込みワークフロー
 
 ### `OpenAICompatibleEmbedder`
 
-- `embed(text)` で埋め込みを生成
-- API 失敗時は `warn` ログを出し、内部の `MockEmbedder` にフォールバック
-- `dimension()` で次元数を返却
+- Rig SDK の `openai::EmbeddingModel` をラップ
+- 5 回リトライ（指数バックオフ + jitter）
+- 全リトライ失敗時は `MockEmbedder` にフォールバック
+- `f64` ベクトルを `Vec<f32>` にキャスト
 
 ### `MockEmbedder`
 
-- 入力文字列から FNV-1a ハッシュで stable seed を作成
-- 疑似乱数ベクトルを生成（次元整合のみ担保）
-- テストや API 失敗時のフォールバックとして使用
+- FNV-1a ハッシュで stable seed 生成
+- LCG 疑似乱数でベクトル生成
+- テストや API 失敗時のフォールバック
 
 ## ヘルパー関数
 
-### `search_result_to_entry`
+### `search_result_to_entry`（`long_term.rs` 内 `pub(crate)`）
 
-`SearchResult` を `MemoryEntry` に変換するヘルパー関数。
-
-- `content`: payload から取得
+`SearchResult` → `MemoryEntry` 変換:
+- `content`: payload から
 - `score`: 検索スコア
-- `created_at`: Unix タイムスタンプから `DateTime<Utc>` に変換
-- `metadata`: payload 全体を保持
+- `created_at`: Unix タイムスタンプ → `DateTime<Utc>`
+- `metadata`: payload 全体
 
 ## 連携ポイント
 
