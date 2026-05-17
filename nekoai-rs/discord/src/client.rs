@@ -369,7 +369,10 @@ impl DiscordClient {
         }
         if enabled.contains("get_voice_states") {
             runtime_for_tools
-                .add_tool(GetVoiceStates::new(http.clone()))
+                .add_tool(GetVoiceStates::new(
+                    http.clone(),
+                    discord_client.cache.clone(),
+                ))
                 .await;
         }
         if enabled.contains("move_member_to_voice") {

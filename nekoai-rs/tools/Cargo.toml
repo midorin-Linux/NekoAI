@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 async-trait.workspace = true
+futures.workspace = true
 nekoai-config.workspace = true
 nekoai-domain.workspace = true
 rig.workspace = true

@@ -30,15 +30,14 @@ pub fn save_mcp_servers(servers: &[McpServerConfig]) -> Result<()> {
     if let Some(parent) = path.parent()
         && !parent.exists()
     {
-        std::fs::create_dir_all(parent).with_context(|| {
-            format!("failed to create config directory: {}", parent.display())
-        })?;
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create config directory: {}", parent.display()))?;
     }
     let file = McpServersFile {
         mcp_servers: servers.to_vec(),
     };
-    let content = serde_json::to_string_pretty(&file)
-        .context("failed to serialize MCP config to JSON")?;
+    let content =
+        serde_json::to_string_pretty(&file).context("failed to serialize MCP config to JSON")?;
     std::fs::write(path, &content)
         .with_context(|| format!("failed to write MCP config: {MCP_CONFIG_PATH}"))?;
     info!(path = MCP_CONFIG_PATH, "MCP configuration saved");

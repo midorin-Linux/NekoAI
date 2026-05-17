@@ -1,7 +1,9 @@
 use anyhow::Result;
 use nekoai_agent::runtime::AgentRuntime;
-use nekoai_config::loader::{ChatPlatform, Config, McpServerConfig};
-use nekoai_config::mcp_config;
+use nekoai_config::{
+    loader::{ChatPlatform, Config, McpServerConfig},
+    mcp_config,
+};
 use nekoai_discord::client::DiscordClient;
 use tracing::info;
 

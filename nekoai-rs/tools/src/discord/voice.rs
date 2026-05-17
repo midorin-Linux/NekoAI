@@ -6,6 +6,7 @@ use serenity::{
     all::{
         Channel, ChannelType, CreateStageInstance, EditMember, EditStageInstance, EditVoiceState,
     },
+    cache::Cache,
     http::Http,
 };
 use tracing;
@@ -23,6 +24,7 @@ use crate::{
 
 pub struct GetVoiceStates {
     http: Arc<Http>,
+    cache: Arc<Cache>,
 }
 
 pub struct MoveMemberToVoice {
@@ -35,6 +37,12 @@ pub struct SetVoiceMuteDeafen {
 
 pub struct ManageStageTopic {
     http: Arc<Http>,
+}
+
+impl GetVoiceStates {
+    pub fn new(http: Arc<Http>, cache: Arc<Cache>) -> Self {
+        Self { http, cache }
+    }
 }
 
 impl Tool for GetVoiceStates {
@@ -59,32 +67,67 @@ impl Tool for GetVoiceStates {
 
     async fn call(&self, args: Self::Args) -> Result<Self::Output, Self::Error> {
         tracing::info!(target: "nekoai-tools", tool = Self::NAME, "tool called");
+
         let Some(guild_id) = get_guild_id_default(&args) else {
             return Ok(err("guild_id is required"));
         };
 
-        let channels = match retry_discord(|| {
+        let channels_result = retry_discord(|| {
             let http = self.http.clone();
             async move { guild_id.channels(&http).await }
         })
-        .await
-        {
-            Ok(channels) => channels,
-            Err(error) => return Ok(err(format!("Failed to fetch channels: {error}"))),
+        .await;
+
+        let channels = match channels_result {
+            Ok(ch) => ch,
+            Err(e) => return Ok(err(format!("Failed to fetch channels: {e}"))),
+        };
+
+        let Some(guild) = self.cache.guild(guild_id) else {
+            return Ok(err("Guild not found in cache"));
         };
 
         let voice_channels = channels
             .values()
-            .filter(|channel| {
-                channel.kind == ChannelType::Voice || channel.kind == ChannelType::Stage
-            })
+            .filter(|ch| matches!(ch.kind, ChannelType::Voice | ChannelType::Stage))
             .map(|channel| {
+                let channel_id = channel.id;
+                let members_in_vc: Vec<_> = guild
+                    .voice_states
+                    .iter()
+                    .filter(|(_, vs)| vs.channel_id == Some(channel_id))
+                    .map(|(user_id, vs)| {
+                        let username = vs
+                            .member
+                            .as_ref()
+                            .map(|m| m.user.name.clone())
+                            .unwrap_or_else(|| user_id.to_string());
+
+                        let display_name = vs
+                            .member
+                            .as_ref()
+                            .and_then(|m| m.nick.as_ref())
+                            .unwrap_or(&username);
+
+                        json!({
+                            "user_id": user_id.get(),
+                            "username": display_name,
+                            "mute": vs.mute,
+                            "deaf": vs.deaf,
+                            "self_mute": vs.self_mute,
+                            "self_deaf": vs.self_deaf,
+                            "suppress": vs.suppress,
+                        })
+                    })
+                    .collect();
+
                 json!({
                     "channel_id": channel.id.get(),
-                    "name": channel.name,
+                    "name": channel.name.clone(),
                     "kind": format!("{:?}", channel.kind),
                     "user_limit": channel.user_limit,
                     "bitrate": channel.bitrate,
+                    "members_in_vc": members_in_vc,
                 })
             })
             .collect::<Vec<_>>();
@@ -323,9 +366,4 @@ impl Tool for ManageStageTopic {
     }
 }
 
-impl_new!(
-    GetVoiceStates,
-    MoveMemberToVoice,
-    SetVoiceMuteDeafen,
-    ManageStageTopic
-);
+impl_new!(MoveMemberToVoice, SetVoiceMuteDeafen, ManageStageTopic);

@@ -5,8 +5,7 @@ pub mod wizard;
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use nekoai_config::loader::Config;
-use nekoai_config::mcp_config;
+use nekoai_config::{loader::Config, mcp_config};
 use tracing::{info, warn};
 
 /// Environment variable names for configuration (preferred over CLI flags).
